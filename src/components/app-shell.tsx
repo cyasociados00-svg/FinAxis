@@ -104,7 +104,7 @@ export function AppShell({
                 to="/auth"
                 className="shrink-0 rounded bg-amber-200 px-2 py-0.5 font-medium hover:bg-amber-300 dark:bg-amber-800 dark:hover:bg-amber-700"
               >
-                Iniciar sesión ->
+                Iniciar sesión &rarr;
               </Link>
             </div>
           )}
@@ -117,7 +117,7 @@ export function AppShell({
                 to="/onboarding"
                 className="shrink-0 rounded bg-blue-200 px-2 py-0.5 font-medium hover:bg-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
               >
-                Configurar ->
+                Configurar &rarr;
               </Link>
             </div>
           )}
