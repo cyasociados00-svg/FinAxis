@@ -4,12 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useStore, type CreditCard, type Account } from "@/lib/store";
 import { formatPYG, formatPct } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { arbitrageAnalysis } from "@/lib/finance-math";
-import { TrendingUp, TrendingDown, Pencil, Trash2, Plus } from "lucide-react";
+import { Pencil, Trash2, Plus } from "lucide-react";
 import { CardDialog } from "@/components/forms/card-dialog";
 import { AccountDialog } from "@/components/forms/account-dialog";
 import { ConfirmDelete } from "@/components/forms/confirm-delete";
@@ -47,7 +44,7 @@ function Tesoreria() {
   return (
     <AppShell
       title="Cuentas"
-      subtitle="Cuentas, tarjetas y arbitraje"
+      subtitle="Cuentas y tarjetas"
       actions={
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => { setAccEditing(null); setAccOpen(true); }}>
@@ -164,12 +161,6 @@ function Tesoreria() {
         </CardContent>
       </Card>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {cards.map((c) => (
-          <ArbitrageSim key={c.id} cardName={c.name} balance={c.balancePYG} cardTNA={c.tna} />
-        ))}
-      </div>
-
       <CardDialog open={open} onOpenChange={setOpen} card={editing} />
       <AccountDialog open={accOpen} onOpenChange={setAccOpen} account={accEditing} />
       <ConfirmDelete
@@ -191,61 +182,5 @@ function Tesoreria() {
         onConfirm={() => { if (accToDelete) deleteAccount(accToDelete.id); setAccToDelete(null); }}
       />
     </AppShell>
-  );
-}
-
-function ArbitrageSim({
-  cardName, balance, cardTNA,
-}: { cardName: string; balance: number; cardTNA: number }) {
-  const [amount, setAmount] = useState(String(balance));
-  const [tnaCard, setTnaCard] = useState(String(cardTNA));
-  const [tnaInv, setTnaInv] = useState("35");
-  const a = arbitrageAnalysis(Number(amount) || 0, Number(tnaCard) || 0, Number(tnaInv) || 0);
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium">Simulador de Arbitraje - {cardName}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <Label className="text-[10px] uppercase tracking-wider">Monto</Label>
-            <Input className="num font-mono h-9" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </div>
-          <div>
-            <Label className="text-[10px] uppercase tracking-wider">TNA Tarjeta %</Label>
-            <Input className="num font-mono h-9" value={tnaCard} onChange={(e) => setTnaCard(e.target.value)} />
-          </div>
-          <div>
-            <Label className="text-[10px] uppercase tracking-wider">TNA Inv. %</Label>
-            <Input className="num font-mono h-9" value={tnaInv} onChange={(e) => setTnaInv(e.target.value)} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded border bg-muted/40 p-2">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Costo financiero/mes</div>
-            <div className="num font-mono text-[color:var(--color-negative)]">-{formatPYG(a.costMonthly)}</div>
-            <div className="text-[10px] text-muted-foreground">@ {formatPct(a.monthlyCard)}/mes</div>
-          </div>
-          <div className="rounded border bg-muted/40 p-2">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Rendimiento/mes</div>
-            <div className="num font-mono text-[color:var(--color-positive)]">+{formatPYG(a.gainMonthly)}</div>
-            <div className="text-[10px] text-muted-foreground">@ {formatPct(a.monthlyInvest)}/mes</div>
-          </div>
-        </div>
-        <div className={`flex items-center justify-between rounded border p-3 ${a.positive ? "border-[color:var(--color-positive)]/40 bg-[color:var(--color-positive)]/10" : "border-[color:var(--color-negative)]/40 bg-[color:var(--color-negative)]/10"}`}>
-          <div className="flex items-center gap-2">
-            {a.positive ? <TrendingUp className="h-4 w-4 text-[color:var(--color-positive)]" /> : <TrendingDown className="h-4 w-4 text-[color:var(--color-negative)]" />}
-            <span className="text-xs font-medium uppercase tracking-wider">
-              {a.positive ? "Arbitraje positivo" : "Conviene cancelar tarjeta"}
-            </span>
-          </div>
-          <div className={`num font-mono text-base font-semibold ${a.positive ? "text-[color:var(--color-positive)]" : "text-[color:var(--color-negative)]"}`}>
-            {a.positive ? "+" : ""}{formatPYG(a.net)}/mes
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
