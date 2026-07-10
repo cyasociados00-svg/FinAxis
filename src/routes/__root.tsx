@@ -121,18 +121,25 @@ function RootComponent() {
     }
     boot();
 
-    // Re-act to auth changes (login / logout from any tab)
+    // Re-act to auth changes (login / logout from any tab).
+    // IMPORTANT: gotrue holds an internal lock while firing this callback.
+    // store.hydrate() calls supabase.auth.getUser(), which needs that same
+    // lock — calling it directly here deadlocks signInWithPassword (the login
+    // promise never resolves, UI stuck on "Cargando..."). Defer with
+    // setTimeout(…, 0) so the work runs after the lock is released.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event) => {
-      const { useStore } = await import("@/lib/store");
-      const store = useStore.getState();
+    } = supabase.auth.onAuthStateChange((event) => {
+      setTimeout(async () => {
+        const { useStore } = await import("@/lib/store");
+        const store = useStore.getState();
 
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-        await store.hydrate();
-      } else if (event === "SIGNED_OUT") {
-        store.clearLocal();
-      }
+        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+          await store.hydrate();
+        } else if (event === "SIGNED_OUT") {
+          store.clearLocal();
+        }
+      }, 0);
     });
 
     // Flush offline queue when connection returns
