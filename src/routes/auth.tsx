@@ -26,12 +26,23 @@ function AuthPage() {
     });
   }, [navigate]);
 
+  function friendlyError(msg: string) {
+    const m = msg.toLowerCase();
+    if (m.includes("invalid login credentials")) return "Email o contraseña incorrectos.";
+    if (m.includes("email not confirmed")) return "Tu email aún no está confirmado. Revisá tu casilla o pedí al administrador desactivar la confirmación por email.";
+    if (m.includes("user already registered") || m.includes("already been registered")) return "Ya existe una cuenta con ese email. Iniciá sesión.";
+    if (m.includes("rate limit")) return "Demasiados intentos seguidos. Esperá unos minutos e intentá de nuevo.";
+    if (m.includes("signups not allowed") || m.includes("signup is disabled")) return "El registro está deshabilitado en el servidor.";
+    if (m.includes("password should be")) return "La contraseña debe tener al menos 6 caracteres.";
+    return msg;
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(friendlyError(error.message)); return; }
     toast.success("Bienvenido! Cargando tus datos...");
     navigate({ to: "/" });
   }
@@ -39,9 +50,18 @@ function AuthPage() {
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     setLoading(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) { toast.error(friendlyError(error.message)); return; }
+
+    // If email confirmation is enabled, signUp returns no session — the user
+    // must click a link in their email before they can log in. Don't pretend
+    // they're logged in; tell them what to do.
+    if (!data.session) {
+      toast.info("Cuenta creada. Revisá tu email para confirmar la cuenta antes de iniciar sesión.");
+      return;
+    }
+
     toast.success("¡Cuenta creada! Configurá tus métodos de pago para empezar.");
     navigate({ to: "/onboarding" });
   }
