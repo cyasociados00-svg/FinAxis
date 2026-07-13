@@ -21,6 +21,7 @@ import { Route as PortafolioIndexRouteImport } from './routes/portafolio.index'
 import { Route as PortafolioRentaFijaRouteImport } from './routes/portafolio.renta-fija'
 import { Route as PortafolioFondosRouteImport } from './routes/portafolio.fondos'
 import { Route as PortafolioCriptoRouteImport } from './routes/portafolio.cripto'
+import { Route as PortafolioAhorrosRouteImport } from './routes/portafolio.ahorros'
 import { Route as PortafolioAccionesRouteImport } from './routes/portafolio.acciones'
 
 const TesoreriaRoute = TesoreriaRouteImport.update({
@@ -83,6 +84,11 @@ const PortafolioCriptoRoute = PortafolioCriptoRouteImport.update({
   path: '/cripto',
   getParentRoute: () => PortafolioRoute,
 } as any)
+const PortafolioAhorrosRoute = PortafolioAhorrosRouteImport.update({
+  id: '/ahorros',
+  path: '/ahorros',
+  getParentRoute: () => PortafolioRoute,
+} as any)
 const PortafolioAccionesRoute = PortafolioAccionesRouteImport.update({
   id: '/acciones',
   path: '/acciones',
@@ -99,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/quick-log': typeof QuickLogRoute
   '/tesoreria': typeof TesoreriaRoute
   '/portafolio/acciones': typeof PortafolioAccionesRoute
+  '/portafolio/ahorros': typeof PortafolioAhorrosRoute
   '/portafolio/cripto': typeof PortafolioCriptoRoute
   '/portafolio/fondos': typeof PortafolioFondosRoute
   '/portafolio/renta-fija': typeof PortafolioRentaFijaRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByTo {
   '/quick-log': typeof QuickLogRoute
   '/tesoreria': typeof TesoreriaRoute
   '/portafolio/acciones': typeof PortafolioAccionesRoute
+  '/portafolio/ahorros': typeof PortafolioAhorrosRoute
   '/portafolio/cripto': typeof PortafolioCriptoRoute
   '/portafolio/fondos': typeof PortafolioFondosRoute
   '/portafolio/renta-fija': typeof PortafolioRentaFijaRoute
@@ -129,6 +137,7 @@ export interface FileRoutesById {
   '/quick-log': typeof QuickLogRoute
   '/tesoreria': typeof TesoreriaRoute
   '/portafolio/acciones': typeof PortafolioAccionesRoute
+  '/portafolio/ahorros': typeof PortafolioAhorrosRoute
   '/portafolio/cripto': typeof PortafolioCriptoRoute
   '/portafolio/fondos': typeof PortafolioFondosRoute
   '/portafolio/renta-fija': typeof PortafolioRentaFijaRoute
@@ -146,6 +155,7 @@ export interface FileRouteTypes {
     | '/quick-log'
     | '/tesoreria'
     | '/portafolio/acciones'
+    | '/portafolio/ahorros'
     | '/portafolio/cripto'
     | '/portafolio/fondos'
     | '/portafolio/renta-fija'
@@ -160,6 +170,7 @@ export interface FileRouteTypes {
     | '/quick-log'
     | '/tesoreria'
     | '/portafolio/acciones'
+    | '/portafolio/ahorros'
     | '/portafolio/cripto'
     | '/portafolio/fondos'
     | '/portafolio/renta-fija'
@@ -175,6 +186,7 @@ export interface FileRouteTypes {
     | '/quick-log'
     | '/tesoreria'
     | '/portafolio/acciones'
+    | '/portafolio/ahorros'
     | '/portafolio/cripto'
     | '/portafolio/fondos'
     | '/portafolio/renta-fija'
@@ -278,6 +290,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortafolioCriptoRouteImport
       parentRoute: typeof PortafolioRoute
     }
+    '/portafolio/ahorros': {
+      id: '/portafolio/ahorros'
+      path: '/ahorros'
+      fullPath: '/portafolio/ahorros'
+      preLoaderRoute: typeof PortafolioAhorrosRouteImport
+      parentRoute: typeof PortafolioRoute
+    }
     '/portafolio/acciones': {
       id: '/portafolio/acciones'
       path: '/acciones'
@@ -290,6 +309,7 @@ declare module '@tanstack/react-router' {
 
 interface PortafolioRouteChildren {
   PortafolioAccionesRoute: typeof PortafolioAccionesRoute
+  PortafolioAhorrosRoute: typeof PortafolioAhorrosRoute
   PortafolioCriptoRoute: typeof PortafolioCriptoRoute
   PortafolioFondosRoute: typeof PortafolioFondosRoute
   PortafolioRentaFijaRoute: typeof PortafolioRentaFijaRoute
@@ -298,6 +318,7 @@ interface PortafolioRouteChildren {
 
 const PortafolioRouteChildren: PortafolioRouteChildren = {
   PortafolioAccionesRoute: PortafolioAccionesRoute,
+  PortafolioAhorrosRoute: PortafolioAhorrosRoute,
   PortafolioCriptoRoute: PortafolioCriptoRoute,
   PortafolioFondosRoute: PortafolioFondosRoute,
   PortafolioRentaFijaRoute: PortafolioRentaFijaRoute,

@@ -8,6 +8,7 @@ import type {
   CryptoPosition,
   Installment,
   MutualFund,
+  ProgrammedSaving,
   StockPosition,
   Transaction,
 } from "./store";
@@ -168,6 +169,39 @@ const fundToRow = (f: MutualFund, uid: string) => ({
   current_value_pyg: f.currentValuePYG,
 });
 
+export const savingFromRow = (r: any): ProgrammedSaving => ({
+  id: r.id,
+  name: r.name,
+  sourceAccountId: r.source_account_id ?? "",
+  amountPYG: Number(r.amount_pyg) || 0,
+  frequency: r.frequency,
+  tna: Number(r.tna) || 0,
+  depositedPYG: Number(r.deposited_pyg) || 0,
+  balancePYG: Number(r.balance_pyg) || 0,
+  goalPYG: Number(r.goal_pyg) || 0,
+  goalDate: r.goal_date ?? undefined,
+  nextRun: r.next_run,
+  lastAccrual: r.last_accrual,
+  active: r.active,
+  createdAt: r.created_at ?? new Date().toISOString(),
+});
+const savingToRow = (s: ProgrammedSaving, uid: string) => ({
+  id: s.id,
+  user_id: uid,
+  name: s.name,
+  source_account_id: s.sourceAccountId,
+  amount_pyg: s.amountPYG,
+  frequency: s.frequency,
+  tna: s.tna,
+  deposited_pyg: s.depositedPYG,
+  balance_pyg: s.balancePYG,
+  goal_pyg: s.goalPYG,
+  goal_date: s.goalDate ?? null,
+  next_run: s.nextRun,
+  last_accrual: s.lastAccrual,
+  active: s.active,
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function userId(): Promise<string | null> {
@@ -198,13 +232,14 @@ export type CloudSnapshot = {
   crypto: CryptoPosition[];
   cdas: CDA[];
   funds: MutualFund[];
+  programmedSavings: ProgrammedSaving[];
 };
 
 export async function fetchSnapshot(): Promise<CloudSnapshot | null> {
   const uid = await userId();
   if (!uid) return null;
 
-  const [a, c, t, i, s, cr, cd, f, st] = await Promise.all([
+  const [a, c, t, i, s, cr, cd, f, ps, st] = await Promise.all([
     supabase.from("accounts").select("*").eq("user_id", uid).order("created_at"),
     supabase.from("cards").select("*").eq("user_id", uid).order("created_at"),
     supabase.from("transactions").select("*").eq("user_id", uid).order("date", { ascending: false }),
@@ -213,10 +248,11 @@ export async function fetchSnapshot(): Promise<CloudSnapshot | null> {
     supabase.from("crypto").select("*").eq("user_id", uid),
     supabase.from("cdas").select("*").eq("user_id", uid),
     supabase.from("funds").select("*").eq("user_id", uid),
+    supabase.from("programmed_savings").select("*").eq("user_id", uid).order("created_at"),
     supabase.from("settings").select("exchange_rate").eq("user_id", uid).maybeSingle(),
   ]);
 
-  for (const r of [a, c, t, i, s, cr, cd, f]) check(r.error, "hydrate");
+  for (const r of [a, c, t, i, s, cr, cd, f, ps]) check(r.error, "hydrate");
 
   return {
     exchangeRate: Number(st.data?.exchange_rate ?? 7500),
@@ -228,6 +264,7 @@ export async function fetchSnapshot(): Promise<CloudSnapshot | null> {
     crypto: (cr.data ?? []).map(cryptoFromRow),
     cdas: (cd.data ?? []).map(cdaFromRow),
     funds: (f.data ?? []).map(fundFromRow),
+    programmedSavings: (ps.data ?? []).map(savingFromRow),
   };
 }
 
@@ -353,6 +390,14 @@ export const cloud = {
     await deleteRow("funds", id);
   },
 
+  async saveProgrammedSaving(s: ProgrammedSaving) {
+    const uid = await userId();
+    if (uid) await upsertRow("programmed_savings", savingToRow(s, uid));
+  },
+  async deleteProgrammedSaving(id: string) {
+    await deleteRow("programmed_savings", id);
+  },
+
   async saveExchangeRate(rate: number) {
     const uid = await userId();
     if (!uid) return;
@@ -362,7 +407,7 @@ export const cloud = {
   async wipeAll() {
     const uid = await userId();
     if (!uid) return;
-    for (const t of ["installments", "transactions", "accounts", "cards", "stocks", "crypto", "cdas", "funds"]) {
+    for (const t of ["installments", "transactions", "accounts", "cards", "stocks", "crypto", "cdas", "funds", "programmed_savings"]) {
       const { error } = await supabase.from(t).delete().eq("user_id", uid);
       check(error, `${t} wipe`);
     }
@@ -385,6 +430,7 @@ export async function pushLocalToCloud(snapshot: CloudSnapshot & { exchangeRate:
     { table: "crypto", rows: snapshot.crypto.map((r) => cryptoToRow(r, uid)) },
     { table: "cdas", rows: snapshot.cdas.map((r) => cdaToRow(r, uid)) },
     { table: "funds", rows: snapshot.funds.map((r) => fundToRow(r, uid)) },
+    { table: "programmed_savings", rows: (snapshot.programmedSavings ?? []).map((r) => savingToRow(r, uid)) },
   ];
 
   for (const { table, rows } of tables) {

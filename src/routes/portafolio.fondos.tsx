@@ -2,13 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { useStore, type MutualFund, type ScheduledSaving } from "@/lib/store";
-import { formatPYG, formatPct, formatDate } from "@/lib/format";
+import { useStore, type MutualFund } from "@/lib/store";
+import { formatPYG, formatPct } from "@/lib/format";
 import { useState } from "react";
-import { Pencil, Trash2, Plus, CalendarClock } from "lucide-react";
+import { Pencil, Trash2, Plus } from "lucide-react";
 import { FundDialog } from "@/components/forms/cda-fund-dialog";
-import { ScheduledSavingDialog } from "@/components/forms/scheduled-saving-dialog";
 import { ConfirmDelete } from "@/components/forms/confirm-delete";
 
 export const Route = createFileRoute("/portafolio/fondos")({ component: Fondos });
@@ -73,14 +71,6 @@ function FundCard({
 }) {
   const [contrib, setContrib] = useState("");
   const [val, setVal] = useState(String(fund.currentValuePYG));
-  const scheduledSavings = useStore((s) => s.scheduledSavings);
-  const accounts = useStore((s) => s.accounts);
-  const [schedOpen, setSchedOpen] = useState(false);
-  const [editingSched, setEditingSched] = useState<ScheduledSaving | null>(null);
-
-  const mySched = scheduledSavings.filter(
-    (s) => s.targetType === "fund" && s.targetId === fund.id,
-  );
 
   return (
     <Card>
@@ -120,45 +110,7 @@ function FundCard({
             </div>
           </div>
         </div>
-        <div className="rounded border bg-muted/30 p-2">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Ahorro programado</span>
-            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => { setEditingSched(null); setSchedOpen(true); }}>
-              <CalendarClock className="mr-1 h-3 w-3" /> Programar
-            </Button>
-          </div>
-          {mySched.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">Sin aportes recurrentes.</p>
-          ) : (
-            <ul className="space-y-1">
-              {mySched.map((s) => {
-                const acc = accounts.find((a) => a.id === s.accountId);
-                return (
-                  <li key={s.id} className="flex items-center justify-between text-xs">
-                    <span className="num font-mono">
-                      {formatPYG(s.amountPYG)} · {s.frequency === "monthly" ? "mensual" : s.frequency === "biweekly" ? "quincenal" : "semanal"}
-                    </span>
-                    <span className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                      <span>desde {acc?.name ?? "-"}</span>
-                      <Badge variant="outline" className="text-[9px]">próx {formatDate(s.nextRun)}</Badge>
-                      {!s.active && <Badge variant="outline" className="text-[9px]">pausado</Badge>}
-                      <button className="text-foreground underline" onClick={() => { setEditingSched(s); setSchedOpen(true); }}>editar</button>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
       </CardContent>
-      <ScheduledSavingDialog
-        open={schedOpen}
-        onOpenChange={setSchedOpen}
-        targetType="fund"
-        targetId={fund.id}
-        targetLabel={fund.name}
-        saving={editingSched}
-      />
     </Card>
   );
 }

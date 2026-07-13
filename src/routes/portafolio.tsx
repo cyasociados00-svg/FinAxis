@@ -11,6 +11,7 @@ const tabs = [
   { to: "/portafolio/cripto", label: "Cripto" },
   { to: "/portafolio/renta-fija", label: "Renta Fija (CDA)" },
   { to: "/portafolio/fondos", label: "Fondos Mutuos" },
+  { to: "/portafolio/ahorros", label: "Ahorro Programado" },
 ] as const;
 
 function PortafolioLayout() {

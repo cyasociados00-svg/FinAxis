@@ -1,14 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { useStore, type CDA, type ScheduledSaving } from "@/lib/store";
+import { useStore, type CDA } from "@/lib/store";
 import { formatPYG, formatPct, formatDate } from "@/lib/format";
 import { cdaAccrual } from "@/lib/finance-math";
 import { useState } from "react";
-import { Trash2, Pencil, Plus, CalendarClock } from "lucide-react";
+import { Trash2, Pencil, Plus } from "lucide-react";
 import { CDADialog } from "@/components/forms/cda-fund-dialog";
-import { ScheduledSavingDialog } from "@/components/forms/scheduled-saving-dialog";
 import { ConfirmDelete } from "@/components/forms/confirm-delete";
 
 export const Route = createFileRoute("/portafolio/renta-fija")({ component: RentaFija });
@@ -16,13 +14,9 @@ export const Route = createFileRoute("/portafolio/renta-fija")({ component: Rent
 function RentaFija() {
   const cdas = useStore((s) => s.cdas);
   const removeCDA = useStore((s) => s.removeCDA);
-  const scheduledSavings = useStore((s) => s.scheduledSavings);
-  const accounts = useStore((s) => s.accounts);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<CDA | null>(null);
   const [toDelete, setToDelete] = useState<CDA | null>(null);
-  const [schedFor, setSchedFor] = useState<CDA | null>(null);
-  const [editingSched, setEditingSched] = useState<ScheduledSaving | null>(null);
 
   const totals = cdas.reduce(
     (a, c) => {
@@ -87,10 +81,6 @@ function RentaFija() {
                     {formatDate(c.maturityDate)}<br />({a.daysToMaturity}d)
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Programar aporte"
-                      onClick={() => { setEditingSched(null); setSchedFor(c); }}>
-                      <CalendarClock className="h-3.5 w-3.5" />
-                    </Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditing(c); setOpen(true); }}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -108,30 +98,6 @@ function RentaFija() {
         </table>
       </CardContent>
 
-      {scheduledSavings.filter((s) => s.targetType === "cda").length > 0 && (
-        <div className="border-t bg-muted/30 px-3 py-2">
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Ahorros programados activos</div>
-          <ul className="space-y-1">
-            {scheduledSavings.filter((s) => s.targetType === "cda").map((s) => {
-              const cda = cdas.find((c) => c.id === s.targetId);
-              const acc = accounts.find((a) => a.id === s.accountId);
-              if (!cda) return null;
-              return (
-                <li key={s.id} className="flex items-center justify-between text-xs">
-                  <span>{cda.bank}: <span className="num font-mono">{formatPYG(s.amountPYG)}</span> · {s.frequency}</span>
-                  <span className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <span>desde {acc?.name ?? "-"}</span>
-                    <Badge variant="outline" className="text-[9px]">próx {formatDate(s.nextRun)}</Badge>
-                    {!s.active && <Badge variant="outline" className="text-[9px]">pausado</Badge>}
-                    <button className="text-foreground underline" onClick={() => { setEditingSched(s); setSchedFor(cda); }}>editar</button>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
       <CDADialog open={open} onOpenChange={setOpen} cda={editing} />
       <ConfirmDelete
         open={!!toDelete}
@@ -140,16 +106,6 @@ function RentaFija() {
         description={toDelete ? `${toDelete.bank} · ${formatPYG(toDelete.capital)}.` : undefined}
         onConfirm={() => { if (toDelete) removeCDA(toDelete.id); setToDelete(null); }}
       />
-      {schedFor && (
-        <ScheduledSavingDialog
-          open={!!schedFor}
-          onOpenChange={(v) => { if (!v) { setSchedFor(null); setEditingSched(null); } }}
-          targetType="cda"
-          targetId={schedFor.id}
-          targetLabel={schedFor.bank}
-          saving={editingSched}
-        />
-      )}
     </Card>
   );
 }

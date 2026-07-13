@@ -73,6 +73,7 @@ function Configuracion() {
         crypto: store.crypto,
         cdas: store.cdas,
         funds: store.funds,
+        programmedSavings: store.programmedSavings,
       });
       setMigrationDone(true);
       setCloudIsEmpty(false);

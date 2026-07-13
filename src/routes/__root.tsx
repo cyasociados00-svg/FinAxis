@@ -109,9 +109,9 @@ function RootComponent() {
       const { useStore } = await import("@/lib/store");
       const store = useStore.getState();
 
-      // Run pending scheduled savings
+      // Run pending programmed-savings deposits
       try {
-        store.runScheduledSavings();
+        store.runProgrammedSavings();
       } catch (e) {
         console.error(e);
       }

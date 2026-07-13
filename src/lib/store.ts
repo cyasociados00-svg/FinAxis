@@ -94,14 +94,22 @@ export type MutualFund = {
   currentValuePYG: number;
 };
 export type ScheduledFrequency = "weekly" | "biweekly" | "monthly";
-export type ScheduledSaving = {
+// Sentinel origin: money that pre-existed the app / is funded outside a tracked
+// account. Recurring deposits with this source don't touch any account balance.
+export const EXTERNAL_ORIGIN = "__previo__";
+export type ProgrammedSaving = {
   id: string;
-  targetType: "fund" | "cda";
-  targetId: string;
-  accountId: string;
-  amountPYG: number;
+  name: string;
+  sourceAccountId: string;      // account id for recurring deposits, or EXTERNAL_ORIGIN
+  amountPYG: number;            // deposit per period
   frequency: ScheduledFrequency;
-  nextRun: string;
+  tna: number;                  // fixed annual interest rate (%)
+  depositedPYG: number;         // principal: opening balance + all deposits
+  balancePYG: number;           // principal + interest accrued up to lastAccrual
+  goalPYG: number;              // target amount (0 = no goal)
+  goalDate?: string;            // optional target date (ISO)
+  nextRun: string;              // next scheduled deposit (ISO)
+  lastAccrual: string;          // last date interest was accrued (ISO)
   active: boolean;
   createdAt: string;
 };
@@ -119,7 +127,7 @@ type State = {
   crypto: CryptoPosition[];
   cdas: CDA[];
   funds: MutualFund[];
-  scheduledSavings: ScheduledSaving[];
+  programmedSavings: ProgrammedSaving[];
 
   hydrate: () => Promise<void>;
   clearLocal: () => void;
@@ -154,10 +162,11 @@ type State = {
   addFundContribution: (id: string, amount: number) => void;
   setFundValue: (id: string, value: number) => void;
   payInstallment: (id: string, opts?: { accountId?: string }) => void;
-  addScheduledSaving: (s: Omit<ScheduledSaving, "id" | "createdAt">) => void;
-  updateScheduledSaving: (id: string, patch: Partial<Omit<ScheduledSaving, "id">>) => void;
-  deleteScheduledSaving: (id: string) => void;
-  runScheduledSavings: () => void;
+  addProgrammedSaving: (s: Omit<ProgrammedSaving, "id" | "createdAt" | "depositedPYG" | "balancePYG" | "lastAccrual"> & { openingPYG?: number }) => void;
+  updateProgrammedSaving: (id: string, patch: Partial<Omit<ProgrammedSaving, "id">>) => void;
+  deleteProgrammedSaving: (id: string) => void;
+  depositToSaving: (id: string, amountPYG: number, accountId?: string) => void;
+  runProgrammedSavings: () => void;
   resetData: () => Promise<void>;
 };
 
@@ -197,10 +206,11 @@ const initial: Omit<
   | "addFundContribution"
   | "setFundValue"
   | "payInstallment"
-  | "addScheduledSaving"
-  | "updateScheduledSaving"
-  | "deleteScheduledSaving"
-  | "runScheduledSavings"
+  | "addProgrammedSaving"
+  | "updateProgrammedSaving"
+  | "deleteProgrammedSaving"
+  | "depositToSaving"
+  | "runProgrammedSavings"
   | "resetData"
 > = {
   hydrated: false,
@@ -213,7 +223,7 @@ const initial: Omit<
   crypto: [],
   cdas: [],
   funds: [],
-  scheduledSavings: [],
+  programmedSavings: [],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -547,55 +557,104 @@ export const useStore = create<State>()(
         }
       },
 
-      // ── Scheduled savings ────────────────────────────────────────────────────
-      addScheduledSaving: (s) => {
-        const sched: ScheduledSaving = { ...s, id: uid(), createdAt: new Date().toISOString() };
-        set((st) => ({ scheduledSavings: [...st.scheduledSavings, sched] }));
+      // ── Programmed savings ───────────────────────────────────────────────────
+      addProgrammedSaving: ({ openingPYG, ...s }) => {
+        const opening = openingPYG ?? 0;
+        const nowISO = new Date().toISOString();
+        const saving: ProgrammedSaving = {
+          ...s,
+          id: uid(),
+          depositedPYG: opening,
+          balancePYG: opening,
+          lastAccrual: nowISO,
+          createdAt: nowISO,
+        };
+        set((st) => ({ programmedSavings: [...st.programmedSavings, saving] }));
+        bg(cloud.saveProgrammedSaving(saving));
       },
-      updateScheduledSaving: (id, patch) =>
-        set((s) => ({
-          scheduledSavings: s.scheduledSavings.map((x) => (x.id === id ? { ...x, ...patch } : x)),
-        })),
-      deleteScheduledSaving: (id) =>
-        set((s) => ({
-          scheduledSavings: s.scheduledSavings.filter((x) => x.id !== id),
-        })),
-      runScheduledSavings: () => {
-        const now = new Date();
-        const list = get().scheduledSavings;
-        let mutated = false;
-        const updated: ScheduledSaving[] = list.map((s) => {
-          if (!s.active) return s;
-          let next = s.nextRun;
-          let safety = 0;
-          while (new Date(next) <= now && safety < 60) {
-            const acc = get().accounts.find((a) => a.id === s.accountId);
-            if (!acc || acc.balancePYG < s.amountPYG) break;
-            const targetExists =
-              s.targetType === "fund"
-                ? !!get().funds.find((f) => f.id === s.targetId)
-                : !!get().cdas.find((c) => c.id === s.targetId);
-            if (!targetExists) break;
-
+      updateProgrammedSaving: (id, patch) =>
+        set((s) => {
+          const next = s.programmedSavings.map((x) => (x.id === id ? { ...x, ...patch } : x));
+          const u = next.find((x) => x.id === id);
+          if (u) bg(cloud.saveProgrammedSaving(u));
+          return { programmedSavings: next };
+        }),
+      deleteProgrammedSaving: (id) => {
+        set((s) => ({ programmedSavings: s.programmedSavings.filter((x) => x.id !== id) }));
+        bg(cloud.deleteProgrammedSaving(id));
+      },
+      // Add a one-off deposit now. Accrues pending interest first, then adds the
+      // deposit to both principal and balance. Deducts from an account unless the
+      // source is external / capital previo.
+      depositToSaving: (id, amountPYG, accountId) => {
+        if (amountPYG <= 0) return;
+        const sv = get().programmedSavings.find((x) => x.id === id);
+        if (!sv) return;
+        const src = accountId ?? sv.sourceAccountId;
+        if (src && src !== EXTERNAL_ORIGIN) {
+          const acc = get().accounts.find((a) => a.id === src);
+          if (acc) {
             get().addTransaction({
               type: "expense",
               method: acc.kind,
-              amount: s.amountPYG,
-              concept: `Ahorro programado · ${s.targetType === "fund" ? "Fondo" : "CDA"}`,
-              category: "Inversión",
-              accountId: s.accountId,
-              date: next,
+              amount: amountPYG,
+              concept: `Ahorro programado · ${sv.name}`,
+              category: "Ahorro",
+              accountId: src,
             });
-            if (s.targetType === "fund") get().addFundContribution(s.targetId, s.amountPYG);
-            else get().addCDACapital(s.targetId, s.amountPYG);
+          }
+        }
+        const nowISO = new Date().toISOString();
+        const days = Math.max(0, (Date.now() - new Date(sv.lastAccrual).getTime()) / 86400000);
+        const interest = sv.balancePYG * (sv.tna / 100) * (days / 365);
+        get().updateProgrammedSaving(id, {
+          depositedPYG: sv.depositedPYG + amountPYG,
+          balancePYG: sv.balancePYG + interest + amountPYG,
+          lastAccrual: nowISO,
+        });
+      },
+      runProgrammedSavings: () => {
+        const now = new Date();
+        const list = get().programmedSavings;
+        for (const s of list) {
+          if (!s.active) continue;
+          let next = s.nextRun;
+          let safety = 0;
+          while (new Date(next) <= now && safety < 120) {
+            const external = !s.sourceAccountId || s.sourceAccountId === EXTERNAL_ORIGIN;
+            const acc = external ? null : get().accounts.find((a) => a.id === s.sourceAccountId);
+            // If funded from an account, require sufficient balance to proceed.
+            if (!external && (!acc || acc.balancePYG < s.amountPYG)) break;
+
+            if (acc) {
+              get().addTransaction({
+                type: "expense",
+                method: acc.kind,
+                amount: s.amountPYG,
+                concept: `Ahorro programado · ${s.name}`,
+                category: "Ahorro",
+                accountId: s.sourceAccountId,
+                date: next,
+              });
+            }
+
+            // Accrue interest on the running balance up to this deposit date,
+            // then add the deposit to principal + balance.
+            const cur = get().programmedSavings.find((x) => x.id === s.id);
+            if (!cur) break;
+            const days = Math.max(0, (new Date(next).getTime() - new Date(cur.lastAccrual).getTime()) / 86400000);
+            const interest = cur.balancePYG * (cur.tna / 100) * (days / 365);
+            get().updateProgrammedSaving(s.id, {
+              depositedPYG: cur.depositedPYG + s.amountPYG,
+              balancePYG: cur.balancePYG + interest + s.amountPYG,
+              lastAccrual: next,
+              nextRun: advance(next, s.frequency),
+            });
 
             next = advance(next, s.frequency);
-            mutated = true;
             safety++;
           }
-          return next !== s.nextRun ? { ...s, nextRun: next } : s;
-        });
-        if (mutated) set({ scheduledSavings: updated });
+        }
       },
 
       resetData: async () => {
@@ -615,7 +674,7 @@ export const useStore = create<State>()(
         crypto: state.crypto,
         cdas: state.cdas,
         funds: state.funds,
-        scheduledSavings: state.scheduledSavings,
+        programmedSavings: state.programmedSavings,
         hydrated: state.hydrated,
       }),
     },
