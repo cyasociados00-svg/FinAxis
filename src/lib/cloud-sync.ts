@@ -252,7 +252,10 @@ export async function fetchSnapshot(): Promise<CloudSnapshot | null> {
     supabase.from("settings").select("exchange_rate").eq("user_id", uid).maybeSingle(),
   ]);
 
-  for (const r of [a, c, t, i, s, cr, cd, f, ps]) check(r.error, "hydrate");
+  for (const r of [a, c, t, i, s, cr, cd, f]) check(r.error, "hydrate");
+  // programmed_savings is newer: if the table isn't created yet, degrade
+  // gracefully to an empty list instead of breaking the whole hydrate.
+  if (ps.error) console.warn("[Cloud] programmed_savings unavailable:", ps.error.message);
 
   return {
     exchangeRate: Number(st.data?.exchange_rate ?? 7500),
