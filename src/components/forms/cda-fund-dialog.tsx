@@ -8,23 +8,20 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStore, purchaseFromAccount, type CDA, type MutualFund } from "@/lib/store";
 
+export const EXTERNAL_ORIGIN = "__previo__";
+
 function AccountPicker({
   accountId, setAccountId, amount,
 }: { accountId: string; setAccountId: (v: string) => void; amount: number }) {
   const accounts = useStore((s) => s.accounts);
-  if (accounts.length === 0) {
-    return (
-      <div className="rounded border bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-        No hay cuentas. Creá una desde Tesorería para poder descontar el aporte.
-      </div>
-    );
-  }
+  const isExternal = accountId === EXTERNAL_ORIGIN;
   return (
     <div className="rounded border bg-muted/40 p-3">
-      <Label className="text-xs uppercase tracking-wider">Cuenta de origen (pago)</Label>
+      <Label className="text-xs uppercase tracking-wider">Origen del capital</Label>
       <Select value={accountId} onValueChange={setAccountId}>
-        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectTrigger><SelectValue placeholder="Elegir origen" /></SelectTrigger>
         <SelectContent>
+          <SelectItem value={EXTERNAL_ORIGIN}>Capital previo (no descuenta)</SelectItem>
           {accounts.map((a) => (
             <SelectItem key={a.id} value={a.id}>
               {a.name} ({a.balancePYG.toLocaleString("es-PY")} Gs)
@@ -33,9 +30,11 @@ function AccountPicker({
         </SelectContent>
       </Select>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        {amount > 0
-          ? `Se descontarán ${amount.toLocaleString("es-PY")} Gs y se registrará en Registrar (categoría Inversión).`
-          : "Ingresá el capital/aporte para calcular el descuento."}
+        {isExternal
+          ? "No se descontará de ninguna cuenta. Usalo para inversiones que ya existían antes de usar la app."
+          : amount > 0
+            ? `Se descontarán ${amount.toLocaleString("es-PY")} Gs y se registrará en Registrar (categoría Inversión).`
+            : "Ingresá el capital/aporte para calcular el descuento."}
       </p>
     </div>
   );
@@ -62,7 +61,7 @@ export function CDADialog({
     } else {
       setBank(""); setCapital(""); setTna("11.5");
       setIssue(new Date().toISOString().slice(0, 10)); setMaturity("");
-      setAccountId(accounts[0]?.id ?? "");
+      setAccountId(accounts[0]?.id ?? EXTERNAL_ORIGIN);
     }
   }, [open, cda, accounts]);
 
@@ -78,7 +77,7 @@ export function CDADialog({
       updateCDA(cda.id, payload);
     } else {
       addCDA(payload);
-      if (accountId && Number(capital) > 0) {
+      if (accountId && accountId !== EXTERNAL_ORIGIN && Number(capital) > 0) {
         const acc = accounts.find((a) => a.id === accountId);
         purchaseFromAccount({
           accountId,
@@ -151,7 +150,7 @@ export function FundDialog({
       setValue(String(fund.currentValuePYG));
     } else {
       setName(""); setContrib(""); setValue("");
-      setAccountId(accounts[0]?.id ?? "");
+      setAccountId(accounts[0]?.id ?? EXTERNAL_ORIGIN);
     }
   }, [open, fund, accounts]);
 
@@ -167,7 +166,7 @@ export function FundDialog({
       updateFund(fund.id, payload);
     } else {
       addFund(payload);
-      if (accountId && Number(contrib) > 0) {
+      if (accountId && accountId !== EXTERNAL_ORIGIN && Number(contrib) > 0) {
         const acc = accounts.find((a) => a.id === accountId);
         purchaseFromAccount({
           accountId,

@@ -8,23 +8,20 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStore, purchaseFromAccount, type StockPosition, type CryptoPosition } from "@/lib/store";
 
+export const EXTERNAL_ORIGIN = "__previo__";
+
 function AccountPicker({
   accountId, setAccountId, hint,
 }: { accountId: string; setAccountId: (v: string) => void; hint: string }) {
   const accounts = useStore((s) => s.accounts);
-  if (accounts.length === 0) {
-    return (
-      <div className="rounded border bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-        No hay cuentas. Creá una desde Tesorería para poder descontar el costo de la compra.
-      </div>
-    );
-  }
+  const isExternal = accountId === EXTERNAL_ORIGIN;
   return (
     <div className="rounded border bg-muted/40 p-3">
-      <Label className="text-xs uppercase tracking-wider">Cuenta de origen (pago)</Label>
+      <Label className="text-xs uppercase tracking-wider">Origen del capital</Label>
       <Select value={accountId} onValueChange={setAccountId}>
-        <SelectTrigger><SelectValue /></SelectTrigger>
+        <SelectTrigger><SelectValue placeholder="Elegir origen" /></SelectTrigger>
         <SelectContent>
+          <SelectItem value={EXTERNAL_ORIGIN}>Capital previo (no descuenta)</SelectItem>
           {accounts.map((a) => (
             <SelectItem key={a.id} value={a.id}>
               {a.name} ({a.balancePYG.toLocaleString("es-PY")} Gs)
@@ -32,7 +29,11 @@ function AccountPicker({
           ))}
         </SelectContent>
       </Select>
-      <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        {isExternal
+          ? "No se descontará de ninguna cuenta. Usalo para inversiones que ya existían antes de usar la app."
+          : hint}
+      </p>
     </div>
   );
 }
@@ -64,7 +65,7 @@ export function StockDialog({ open, onOpenChange, position }: StockProps) {
       setCurrent(String(position.currentPriceUSD));
     } else {
       setSymbol(""); setName(""); setQty(""); setAvg(""); setCurrent("");
-      setAccountId(accounts[0]?.id ?? "");
+      setAccountId(accounts[0]?.id ?? EXTERNAL_ORIGIN);
     }
   }, [open, position, accounts]);
 
@@ -84,7 +85,7 @@ export function StockDialog({ open, onOpenChange, position }: StockProps) {
       updateStock(position.id, payload);
     } else {
       buyStock(payload);
-      if (accountId && costPYG > 0) {
+      if (accountId && accountId !== EXTERNAL_ORIGIN && costPYG > 0) {
         const acc = accounts.find((a) => a.id === accountId);
         purchaseFromAccount({
           accountId,
@@ -186,7 +187,7 @@ export function CryptoDialog({ open, onOpenChange, position }: CryptoProps) {
       setCurrent(String(position.currentPriceUSD));
     } else {
       setSymbol(""); setCoingeckoId(""); setQty(""); setAvg(""); setCurrent("");
-      setAccountId(accounts[0]?.id ?? "");
+      setAccountId(accounts[0]?.id ?? EXTERNAL_ORIGIN);
     }
   }, [open, position, accounts]);
 
@@ -206,7 +207,7 @@ export function CryptoDialog({ open, onOpenChange, position }: CryptoProps) {
       updateCrypto(position.id, payload);
     } else {
       buyCrypto(payload);
-      if (accountId && costPYG > 0) {
+      if (accountId && accountId !== EXTERNAL_ORIGIN && costPYG > 0) {
         const acc = accounts.find((a) => a.id === accountId);
         purchaseFromAccount({
           accountId,
