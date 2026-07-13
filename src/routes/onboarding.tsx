@@ -198,7 +198,7 @@ function OnboardingPage() {
                     onChange={(e) => setCardLimit(e.target.value)} />
                 </div>
                 <div>
-                  <Label className="text-xs uppercase tracking-wider">Saldo actual (PYG)</Label>
+                  <Label className="text-xs uppercase tracking-wider">Deuda actual (PYG)</Label>
                   <Input type="number" className="num font-mono" value={cardBalance}
                     onChange={(e) => setCardBalance(e.target.value)} />
                 </div>

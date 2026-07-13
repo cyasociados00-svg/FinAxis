@@ -237,7 +237,12 @@ function Configuracion() {
                         TNA {c.tna}% · cierre {c.closingDay} · vto. {c.dueDay}
                       </div>
                     </div>
-                    <div className="num font-mono font-medium">{formatPYG(c.balancePYG)}</div>
+                    <div className="text-right">
+                      <div className="num font-mono font-medium text-[color:var(--color-positive)]">
+                        {formatPYG(Math.max(0, c.limitPYG - c.balancePYG))}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">Usado {formatPYG(c.balancePYG)}</div>
+                    </div>
                   </div>
                 ))
               )}

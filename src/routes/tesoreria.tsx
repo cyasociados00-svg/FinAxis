@@ -109,7 +109,7 @@ function Tesoreria() {
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Tarjeta</th>
                 <th className="px-3 py-2 text-right font-medium">Límite</th>
-                <th className="px-3 py-2 text-right font-medium">Saldo</th>
+                <th className="px-3 py-2 text-right font-medium">Disponible</th>
                 <th className="px-3 py-2 text-right font-medium">Util.</th>
                 <th className="px-3 py-2 text-right font-medium">Pago Mín.</th>
                 <th className="px-3 py-2 text-right font-medium">Vencimiento</th>
@@ -120,6 +120,7 @@ function Tesoreria() {
               {cards.map((c) => {
                 const util = (c.balancePYG / c.limitPYG) * 100;
                 const min = c.balancePYG * (c.minPaymentPct / 100);
+                const available = Math.max(0, c.limitPYG - c.balancePYG);
                 const days = dueIn(c.dueDay);
                 return (
                   <tr key={c.id} className="border-t">
@@ -130,7 +131,10 @@ function Tesoreria() {
                       </div>
                     </td>
                     <td className="num px-3 py-3 text-right font-mono text-muted-foreground">{formatPYG(c.limitPYG)}</td>
-                    <td className="num px-3 py-3 text-right font-mono">{formatPYG(c.balancePYG)}</td>
+                    <td className="num px-3 py-3 text-right font-mono">
+                      <div className="font-medium text-[color:var(--color-positive)]">{formatPYG(available)}</div>
+                      <div className="text-[10px] text-muted-foreground">Usado {formatPYG(c.balancePYG)}</div>
+                    </td>
                     <td className="num px-3 py-3 text-right font-mono">
                       <span className={util > 70 ? "text-[color:var(--color-negative)]" : util > 40 ? "text-amber-600" : ""}>
                         {formatPct(util)}

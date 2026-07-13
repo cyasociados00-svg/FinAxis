@@ -75,7 +75,7 @@ export function CardDialog({ open, onOpenChange, card }: Props) {
               <Input type="number" className="num font-mono" value={limit} onChange={(e) => setLimit(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs uppercase tracking-wider">Saldo actual (PYG)</Label>
+              <Label className="text-xs uppercase tracking-wider">Deuda actual (PYG)</Label>
               <Input type="number" className="num font-mono" value={balance} onChange={(e) => setBalance(e.target.value)} />
             </div>
           </div>
