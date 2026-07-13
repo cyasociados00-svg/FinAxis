@@ -7,6 +7,7 @@ import {
   Bitcoin,
   Landmark,
   PiggyBank,
+  Target,
   Settings,
   LineChart,
   Receipt,
@@ -35,6 +36,7 @@ const portfolio = [
   { title: "Cripto", url: "/portafolio/cripto", icon: Bitcoin },
   { title: "Renta Fija (CDA)", url: "/portafolio/renta-fija", icon: Landmark },
   { title: "Fondos Mutuos", url: "/portafolio/fondos", icon: PiggyBank },
+  { title: "Ahorro Programado", url: "/portafolio/ahorros", icon: Target },
 ];
 
 const config = [{ title: "Configuración", url: "/configuracion", icon: Settings }];
