@@ -10,6 +10,8 @@ CREATE TABLE public.programmed_savings (
   amount_pyg numeric not null default 0,        -- deposit per period
   frequency text not null check (frequency in ('weekly','biweekly','monthly')),
   tna numeric not null default 0,               -- fixed annual interest rate (%)
+  term_periods integer not null default 0,      -- total number of deposits (0 = open-ended)
+  opening_pyg numeric not null default 0,       -- pre-existing balance at start
   deposited_pyg numeric not null default 0,     -- principal: opening + deposits
   balance_pyg numeric not null default 0,       -- principal + accrued interest
   goal_pyg numeric not null default 0,          -- target amount (0 = no goal)

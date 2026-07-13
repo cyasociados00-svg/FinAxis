@@ -38,6 +38,35 @@ export const cdaAccrual = (cda: CDA, asOf: Date = new Date()) => {
   };
 };
 
+export const periodsPerYear = (freq: "weekly" | "biweekly" | "monthly") =>
+  freq === "weekly" ? 52 : freq === "biweekly" ? 26 : 12;
+
+// Projected maturity value of a fixed-term programmed savings.
+// A series of equal deposits (annuity-due: deposited at the start of each
+// period, which matches how banks debit early in the month) plus an optional
+// opening balance, all growing at a fixed annual rate.
+export const savingsProjection = (params: {
+  amount: number;        // deposit per period
+  periods: number;       // total number of deposits (term)
+  annualRatePct: number; // fixed annual rate (TNA)
+  freq: "weekly" | "biweekly" | "monthly";
+  opening?: number;      // pre-existing balance at start
+}) => {
+  const ppy = periodsPerYear(params.freq);
+  const i = params.annualRatePct / 100 / ppy;
+  const n = Math.max(0, Math.floor(params.periods));
+  const opening = params.opening ?? 0;
+  const deposited = params.amount * n + opening;
+  let finalValue: number;
+  if (i === 0) {
+    finalValue = deposited;
+  } else {
+    const annuityDue = params.amount * (((Math.pow(1 + i, n) - 1) / i) * (1 + i));
+    finalValue = opening * Math.pow(1 + i, n) + annuityDue;
+  }
+  return { deposited, finalValue, interest: finalValue - deposited };
+};
+
 export const arbitrageAnalysis = (
   balance: number,
   cardTNA: number,

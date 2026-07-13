@@ -104,9 +104,11 @@ export type ProgrammedSaving = {
   amountPYG: number;            // deposit per period
   frequency: ScheduledFrequency;
   tna: number;                  // fixed annual interest rate (%)
+  termPeriods: number;          // total number of deposits (0 = open-ended)
+  openingPYG: number;           // pre-existing balance at start (immutable)
   depositedPYG: number;         // principal: opening balance + all deposits
   balancePYG: number;           // principal + interest accrued up to lastAccrual
-  goalPYG: number;              // target amount (0 = no goal)
+  goalPYG: number;              // target amount (0 = no goal); ignored when termPeriods > 0
   goalDate?: string;            // optional target date (ISO)
   nextRun: string;              // next scheduled deposit (ISO)
   lastAccrual: string;          // last date interest was accrued (ISO)
@@ -162,7 +164,7 @@ type State = {
   addFundContribution: (id: string, amount: number) => void;
   setFundValue: (id: string, value: number) => void;
   payInstallment: (id: string, opts?: { accountId?: string }) => void;
-  addProgrammedSaving: (s: Omit<ProgrammedSaving, "id" | "createdAt" | "depositedPYG" | "balancePYG" | "lastAccrual"> & { openingPYG?: number }) => void;
+  addProgrammedSaving: (s: Omit<ProgrammedSaving, "id" | "createdAt" | "depositedPYG" | "balancePYG" | "lastAccrual">) => void;
   updateProgrammedSaving: (id: string, patch: Partial<Omit<ProgrammedSaving, "id">>) => void;
   deleteProgrammedSaving: (id: string) => void;
   depositToSaving: (id: string, amountPYG: number, accountId?: string) => void;
@@ -558,11 +560,12 @@ export const useStore = create<State>()(
       },
 
       // ── Programmed savings ───────────────────────────────────────────────────
-      addProgrammedSaving: ({ openingPYG, ...s }) => {
-        const opening = openingPYG ?? 0;
+      addProgrammedSaving: (s) => {
+        const opening = s.openingPYG ?? 0;
         const nowISO = new Date().toISOString();
         const saving: ProgrammedSaving = {
           ...s,
+          openingPYG: opening,
           id: uid(),
           depositedPYG: opening,
           balancePYG: opening,

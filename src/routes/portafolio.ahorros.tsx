@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useStore, EXTERNAL_ORIGIN, type ProgrammedSaving } from "@/lib/store";
 import { formatPYG, formatPct, formatDate } from "@/lib/format";
+import { savingsProjection } from "@/lib/finance-math";
 import { useState } from "react";
 import { Pencil, Trash2, Plus, PiggyBank, Pause, Play } from "lucide-react";
 import { ProgrammedSavingDialog } from "@/components/forms/programmed-saving-dialog";
@@ -18,6 +19,19 @@ const freqLabel: Record<string, string> = { weekly: "semanal", biweekly: "quince
 function liveValue(s: ProgrammedSaving) {
   const days = Math.max(0, (Date.now() - new Date(s.lastAccrual).getTime()) / 86400000);
   return s.balancePYG + s.balancePYG * (s.tna / 100) * (days / 365);
+}
+
+// Projected maturity value + end date for fixed-term plans.
+function projection(s: ProgrammedSaving) {
+  if (!s.termPeriods) return null;
+  const { finalValue, deposited } = savingsProjection({
+    amount: s.amountPYG, periods: s.termPeriods, annualRatePct: s.tna, freq: s.frequency, opening: s.openingPYG,
+  });
+  const end = new Date(s.createdAt);
+  if (s.frequency === "weekly") end.setDate(end.getDate() + 7 * s.termPeriods);
+  else if (s.frequency === "biweekly") end.setDate(end.getDate() + 14 * s.termPeriods);
+  else end.setMonth(end.getMonth() + s.termPeriods);
+  return { finalValue, deposited, endDate: end.toISOString() };
 }
 
 function Ahorros() {
@@ -81,7 +95,12 @@ function SavingCard({ saving, onEdit, onDelete }: { saving: ProgrammedSaving; on
   const interest = value - saving.depositedPYG;
   const src = accounts.find((a) => a.id === saving.sourceAccountId);
   const external = saving.sourceAccountId === EXTERNAL_ORIGIN || !src;
-  const goalPct = saving.goalPYG > 0 ? Math.min(100, (value / saving.goalPYG) * 100) : 0;
+  const proj = projection(saving);
+  // Progress target: the projected maturity value for fixed-term plans,
+  // otherwise the manual goal (if any).
+  const target = proj ? proj.finalValue : saving.goalPYG;
+  const targetLabel = proj ? "Estimado a recibir" : "Meta";
+  const targetPct = target > 0 ? Math.min(100, (value / target) * 100) : 0;
 
   return (
     <Card>
@@ -107,14 +126,17 @@ function SavingCard({ saving, onEdit, onDelete }: { saving: ProgrammedSaving; on
           <Stat label="Interés" value={`+${formatPYG(interest)}`} tone="positive" />
         </div>
 
-        {saving.goalPYG > 0 && (
+        {target > 0 && (
           <div>
             <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-              <span>Meta {formatPYG(saving.goalPYG)}{saving.goalDate ? ` · ${formatDate(saving.goalDate)}` : ""}</span>
-              <span className="num font-mono">{formatPct(goalPct)}</span>
+              <span>
+                {targetLabel} {formatPYG(target)}
+                {proj ? ` · fin ${formatDate(proj.endDate)}` : saving.goalDate ? ` · ${formatDate(saving.goalDate)}` : ""}
+              </span>
+              <span className="num font-mono">{formatPct(targetPct)}</span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-[color:var(--color-positive)]" style={{ width: `${goalPct}%` }} />
+              <div className="h-full rounded-full bg-[color:var(--color-positive)]" style={{ width: `${targetPct}%` }} />
             </div>
           </div>
         )}
