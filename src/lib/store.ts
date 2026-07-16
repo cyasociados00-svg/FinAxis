@@ -601,7 +601,7 @@ export const useStore = create<State>()(
         const newInst: Installment[] = [];
         for (let k = current; k <= of; k++) {
           newInst.push({
-            id: `${txId}-${k}`,
+            id: uid(), // must be a valid UUID to persist to Supabase
             transactionId: txId,
             number: k,
             of,

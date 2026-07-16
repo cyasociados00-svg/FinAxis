@@ -55,6 +55,14 @@ export function savingSchedule(
 
 export const monthlyInstallment = (amount: number, n: number) => amount / n;
 
+// Installment ids must be valid UUIDs — the Supabase `installments.id` column
+// is uuid, so a composite id like `${txId}-${k}` fails to insert and the row
+// never persists to the cloud.
+const uuid = () =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 export const generateInstallments = (
   transactionId: string,
   amount: number,
@@ -63,7 +71,7 @@ export const generateInstallments = (
 ): Installment[] => {
   const per = monthlyInstallment(amount, n);
   return Array.from({ length: n }, (_, i) => ({
-    id: `${transactionId}-${i + 1}`,
+    id: uuid(),
     transactionId,
     number: i + 1,
     of: n,
