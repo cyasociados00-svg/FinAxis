@@ -3,6 +3,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -114,7 +115,7 @@ export function ProgrammedSavingDialog({ open, onOpenChange, saving }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs uppercase tracking-wider">Cuota (PYG)</Label>
-              <Input type="number" className="num font-mono" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <MoneyInput className="num font-mono" value={amount} onValueChange={setAmount} />
             </div>
             <div>
               <Label className="text-xs uppercase tracking-wider">Frecuencia</Label>
@@ -165,7 +166,7 @@ export function ProgrammedSavingDialog({ open, onOpenChange, saving }: Props) {
           {!saving && (
             <div>
               <Label className="text-xs uppercase tracking-wider">Ya acumulado (opcional)</Label>
-              <Input type="number" className="num font-mono" value={opening} onChange={(e) => setOpening(e.target.value)} placeholder="0" />
+              <MoneyInput className="num font-mono" value={opening} onValueChange={setOpening} placeholder="0" />
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Saldo que ya tenías antes de usar la app. No descuenta de ninguna cuenta.
               </p>
@@ -174,7 +175,7 @@ export function ProgrammedSavingDialog({ open, onOpenChange, saving }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs uppercase tracking-wider">Meta (opcional)</Label>
-              <Input type="number" className="num font-mono" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="0" />
+              <MoneyInput className="num font-mono" value={goal} onValueChange={setGoal} placeholder="0" />
             </div>
             <div>
               <Label className="text-xs uppercase tracking-wider">Fecha meta (opcional)</Label>

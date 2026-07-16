@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Badge } from "@/components/ui/badge";
 import { useStore, EXTERNAL_ORIGIN, type ProgrammedSaving } from "@/lib/store";
 import { formatPYG, formatPct, formatDate } from "@/lib/format";
@@ -151,7 +151,7 @@ function SavingCard({ saving, onEdit, onDelete }: { saving: ProgrammedSaving; on
         <div>
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Aportar ahora</label>
           <div className="flex gap-1">
-            <Input type="number" className="num font-mono h-8" value={amt} onChange={(e) => setAmt(e.target.value)} placeholder="0" />
+            <MoneyInput className="num font-mono h-8" value={amt} onValueChange={setAmt} placeholder="0" />
             <Button size="sm" variant="outline" onClick={() => {
               const n = Number(amt);
               if (n > 0) { deposit(saving.id, n); setAmt(""); }

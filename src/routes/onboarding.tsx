@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LineChart, Wallet, CreditCard, CheckCircle2, ChevronRight, X } from "lucide-react";
@@ -137,8 +138,8 @@ function OnboardingPage() {
                 </div>
                 <div>
                   <Label className="text-xs uppercase tracking-wider">Saldo actual (PYG)</Label>
-                  <Input type="number" className="num font-mono" placeholder="0"
-                    value={accBalance} onChange={(e) => setAccBalance(e.target.value)} />
+                  <MoneyInput className="num font-mono" placeholder="0"
+                    value={accBalance} onValueChange={setAccBalance} />
                 </div>
               </div>
               <Button type="submit" variant="outline" size="sm" disabled={!accName} className="w-full">
@@ -194,13 +195,13 @@ function OnboardingPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs uppercase tracking-wider">Límite (PYG)</Label>
-                  <Input type="number" className="num font-mono" value={cardLimit}
-                    onChange={(e) => setCardLimit(e.target.value)} />
+                  <MoneyInput className="num font-mono" value={cardLimit}
+                    onValueChange={setCardLimit} />
                 </div>
                 <div>
                   <Label className="text-xs uppercase tracking-wider">Deuda actual (PYG)</Label>
-                  <Input type="number" className="num font-mono" value={cardBalance}
-                    onChange={(e) => setCardBalance(e.target.value)} />
+                  <MoneyInput className="num font-mono" value={cardBalance}
+                    onValueChange={setCardBalance} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

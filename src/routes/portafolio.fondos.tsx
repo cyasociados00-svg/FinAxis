@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { useStore, type MutualFund } from "@/lib/store";
 import { formatPYG, formatPct } from "@/lib/format";
 import { useState } from "react";
@@ -95,7 +95,7 @@ function FundCard({
           <div>
             <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Aportar</label>
             <div className="flex gap-1">
-              <Input type="number" className="num font-mono h-8" value={contrib} onChange={(e) => setContrib(e.target.value)} placeholder="0" />
+              <MoneyInput className="num font-mono h-8" value={contrib} onValueChange={setContrib} placeholder="0" />
               <Button size="sm" variant="outline" onClick={() => {
                 const n = Number(contrib);
                 if (n > 0) { onContribute(fund.id, n); setContrib(""); setVal(String(fund.currentValuePYG + n)); }
@@ -105,7 +105,7 @@ function FundCard({
           <div>
             <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Actualizar saldo</label>
             <div className="flex gap-1">
-              <Input type="number" className="num font-mono h-8" value={val} onChange={(e) => setVal(e.target.value)} />
+              <MoneyInput className="num font-mono h-8" value={val} onValueChange={setVal} />
               <Button size="sm" variant="outline" onClick={() => onSetValue(fund.id, Number(val) || 0)}>✓</Button>
             </div>
           </div>

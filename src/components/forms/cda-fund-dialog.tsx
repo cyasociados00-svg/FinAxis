@@ -3,6 +3,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -103,7 +104,7 @@ export function CDADialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs uppercase tracking-wider">Capital (PYG)</Label>
-              <Input type="number" className="num font-mono" value={capital} onChange={(e) => setCapital(e.target.value)} />
+              <MoneyInput className="num font-mono" value={capital} onValueChange={setCapital} />
             </div>
             <div>
               <Label className="text-xs uppercase tracking-wider">TNA %</Label>
@@ -191,11 +192,11 @@ export function FundDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs uppercase tracking-wider">Aportes acumulados (PYG)</Label>
-              <Input type="number" className="num font-mono" value={contrib} onChange={(e) => setContrib(e.target.value)} />
+              <MoneyInput className="num font-mono" value={contrib} onValueChange={setContrib} />
             </div>
             <div>
               <Label className="text-xs uppercase tracking-wider">Valor actual (PYG)</Label>
-              <Input type="number" className="num font-mono" value={value} onChange={(e) => setValue(e.target.value)} />
+              <MoneyInput className="num font-mono" value={value} onValueChange={setValue} />
             </div>
           </div>
           {!fund && <AccountPicker accountId={accountId} setAccountId={setAccountId} amount={Number(contrib) || 0} />}

@@ -3,6 +3,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useStore, type CreditCard } from "@/lib/store";
@@ -72,11 +73,11 @@ export function CardDialog({ open, onOpenChange, card }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs uppercase tracking-wider">Límite (PYG)</Label>
-              <Input type="number" className="num font-mono" value={limit} onChange={(e) => setLimit(e.target.value)} />
+              <MoneyInput className="num font-mono" value={limit} onValueChange={setLimit} />
             </div>
             <div>
               <Label className="text-xs uppercase tracking-wider">Deuda actual (PYG)</Label>
-              <Input type="number" className="num font-mono" value={balance} onChange={(e) => setBalance(e.target.value)} />
+              <MoneyInput className="num font-mono" value={balance} onValueChange={setBalance} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

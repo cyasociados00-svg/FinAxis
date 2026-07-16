@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -70,7 +71,7 @@ export function AccountDialog({ open, onOpenChange, account }: Props) {
             </div>
             <div>
               <Label className="text-xs uppercase tracking-wider">Monto disponible (PYG)</Label>
-              <Input type="number" className="num font-mono" value={balance} onChange={(e) => setBalance(e.target.value)} />
+              <MoneyInput className="num font-mono" value={balance} onValueChange={setBalance} />
             </div>
           </div>
           <DialogFooter>
