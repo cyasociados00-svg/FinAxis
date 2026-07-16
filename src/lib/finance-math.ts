@@ -206,6 +206,15 @@ export const monthlyIncomeExpense = (transactions: Transaction[], months = 6) =>
     };
   }
   for (const t of transactions) {
+    // Credit-card purchases on an installment plan (>1 cuota) are debt, not a
+    // cash expense yet — they're already visible as card balance in Cuentas.
+    // The real cash outflow is each "Pago tarjeta" transaction as cuotas get
+    // paid, so skip the purchase here to avoid double counting. A single-shot
+    // credit purchase (1 cuota, no installment plan) has no later payment
+    // event in the app, so it's still counted at time of purchase.
+    const isInstallmentPurchase = t.method === "credit" && (t.installments ?? 1) > 1;
+    if (isInstallmentPurchase) continue;
+
     const key = format(startOfMonth(new Date(t.date)), "yyyy-MM");
     const b = buckets[key];
     if (!b) continue;
