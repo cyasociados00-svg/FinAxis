@@ -1,11 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MoneyInput } from "@/components/ui/money-input";
 import { Badge } from "@/components/ui/badge";
 import { useStore, EXTERNAL_ORIGIN, type ProgrammedSaving } from "@/lib/store";
 import { formatPYG, formatPct, formatDate } from "@/lib/format";
-import { savingsProjection } from "@/lib/finance-math";
+import { savingSchedule } from "@/lib/finance-math";
 import { useState } from "react";
 import { Pencil, Trash2, Plus, PiggyBank, Pause, Play } from "lucide-react";
 import { ProgrammedSavingDialog } from "@/components/forms/programmed-saving-dialog";
@@ -15,25 +14,6 @@ export const Route = createFileRoute("/portafolio/ahorros")({ component: Ahorros
 
 const freqLabel: Record<string, string> = { weekly: "semanal", biweekly: "quincenal", monthly: "mensual" };
 
-// Live value: stored balance plus interest accrued since the last deposit/accrual.
-function liveValue(s: ProgrammedSaving) {
-  const days = Math.max(0, (Date.now() - new Date(s.lastAccrual).getTime()) / 86400000);
-  return s.balancePYG + s.balancePYG * (s.tna / 100) * (days / 365);
-}
-
-// Projected maturity value + end date for fixed-term plans.
-function projection(s: ProgrammedSaving) {
-  if (!s.termPeriods) return null;
-  const { finalValue, deposited } = savingsProjection({
-    amount: s.amountPYG, periods: s.termPeriods, annualRatePct: s.tna, freq: s.frequency, opening: s.openingPYG,
-  });
-  const end = new Date(s.createdAt);
-  if (s.frequency === "weekly") end.setDate(end.getDate() + 7 * s.termPeriods);
-  else if (s.frequency === "biweekly") end.setDate(end.getDate() + 14 * s.termPeriods);
-  else end.setMonth(end.getMonth() + s.termPeriods);
-  return { finalValue, deposited, endDate: end.toISOString() };
-}
-
 function Ahorros() {
   const savings = useStore((s) => s.programmedSavings);
   const deleteSaving = useStore((s) => s.deleteProgrammedSaving);
@@ -41,17 +21,15 @@ function Ahorros() {
   const [editing, setEditing] = useState<ProgrammedSaving | null>(null);
   const [toDelete, setToDelete] = useState<ProgrammedSaving | null>(null);
 
-  const totalValue = savings.reduce((a, s) => a + liveValue(s), 0);
-  const totalDeposited = savings.reduce((a, s) => a + s.depositedPYG, 0);
+  const totalAportado = savings.reduce((a, s) => a + savingSchedule(s).aportado, 0);
+  const totalMeta = savings.reduce((a, s) => a + savingSchedule(s).meta, 0);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="num text-xs text-muted-foreground">
-          Ahorrado: <span className="font-mono font-medium">{formatPYG(totalValue)}</span>
-          {totalValue > totalDeposited && (
-            <> · interés <span className="font-mono text-[color:var(--color-positive)]">+{formatPYG(totalValue - totalDeposited)}</span></>
-          )}
+          Aportado: <span className="font-mono font-medium">{formatPYG(totalAportado)}</span>
+          {totalMeta > 0 && <> de <span className="font-mono">{formatPYG(totalMeta)}</span></>}
         </p>
         <Button size="sm" onClick={() => { setEditing(null); setOpen(true); }}>
           <Plus className="mr-2 h-3.5 w-3.5" /> Nuevo ahorro
@@ -87,20 +65,12 @@ function Ahorros() {
 
 function SavingCard({ saving, onEdit, onDelete }: { saving: ProgrammedSaving; onEdit: () => void; onDelete: () => void }) {
   const accounts = useStore((s) => s.accounts);
-  const deposit = useStore((s) => s.depositToSaving);
   const update = useStore((s) => s.updateProgrammedSaving);
-  const [amt, setAmt] = useState("");
 
-  const value = liveValue(saving);
-  const interest = value - saving.depositedPYG;
+  const sch = savingSchedule(saving);
   const src = accounts.find((a) => a.id === saving.sourceAccountId);
   const external = saving.sourceAccountId === EXTERNAL_ORIGIN || !src;
-  const proj = projection(saving);
-  // Progress target: the projected maturity value for fixed-term plans,
-  // otherwise the manual goal (if any).
-  const target = proj ? proj.finalValue : saving.goalPYG;
-  const targetLabel = proj ? "Estimado a recibir" : "Meta";
-  const targetPct = target > 0 ? Math.min(100, (value / target) * 100) : 0;
+  const pct = sch.meta > 0 ? Math.min(100, (sch.aportado / sch.meta) * 100) : 0;
 
   return (
     <Card>
@@ -121,55 +91,41 @@ function SavingCard({ saving, onEdit, onDelete }: { saving: ProgrammedSaving; on
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-3 gap-2 text-sm">
-          <Stat label="Aportado" value={formatPYG(saving.depositedPYG)} />
-          <Stat label="Valor actual" value={formatPYG(value)} bold />
-          <Stat label="Interés" value={`+${formatPYG(interest)}`} tone="positive" />
+          <Stat label="Aportado" value={formatPYG(sch.aportado)} />
+          <Stat label="A vencer" value={formatPYG(sch.pending)} />
+          <Stat label="Meta" value={formatPYG(sch.meta)} bold />
         </div>
 
-        {target > 0 && (
-          <div>
-            <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-              <span>
-                {targetLabel} {formatPYG(target)}
-                {proj ? ` · fin ${formatDate(proj.endDate)}` : saving.goalDate ? ` · ${formatDate(saving.goalDate)}` : ""}
-              </span>
-              <span className="num font-mono">{formatPct(targetPct)}</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-[color:var(--color-positive)]" style={{ width: `${targetPct}%` }} />
-            </div>
+        <div>
+          <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+            <span>{sch.elapsed}/{saving.termPeriods} cuotas · {formatDate(saving.startDate)} → {formatDate(sch.endDate)}</span>
+            <span className="num font-mono">{formatPct(pct)}</span>
           </div>
-        )}
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-[color:var(--color-positive)]" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded border bg-muted/30 p-2 text-xs">
+          <span className="text-muted-foreground">Estimado a recibir (con interés)</span>
+          <span className="num font-mono font-medium text-[color:var(--color-positive)]">{formatPYG(sch.estimadoConInteres)}</span>
+        </div>
 
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <Badge variant="secondary" className="text-[9px]">{formatPYG(saving.amountPYG)} · {freqLabel[saving.frequency]}</Badge>
           <Badge variant="outline" className="text-[9px]">TNA {formatPct(saving.tna)}</Badge>
-          <Badge variant="outline" className="text-[9px]">próx {formatDate(saving.nextRun)}</Badge>
           <span>{external ? "capital previo" : `desde ${src?.name}`}</span>
-        </div>
-
-        <div>
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Aportar ahora</label>
-          <div className="flex gap-1">
-            <MoneyInput className="num font-mono h-8" value={amt} onValueChange={setAmt} placeholder="0" />
-            <Button size="sm" variant="outline" onClick={() => {
-              const n = Number(amt);
-              if (n > 0) { deposit(saving.id, n); setAmt(""); }
-            }}>+</Button>
-          </div>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function Stat({ label, value, bold, tone }: { label: string; value: string; bold?: boolean; tone?: "positive" | "negative" }) {
+function Stat({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
     <div className="rounded border bg-muted/40 p-2">
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={`num font-mono ${bold ? "font-semibold" : ""} ${
-        tone === "positive" ? "text-[color:var(--color-positive)]" : tone === "negative" ? "text-[color:var(--color-negative)]" : ""
-      }`}>{value}</div>
+      <div className={`num font-mono ${bold ? "font-semibold" : ""}`}>{value}</div>
     </div>
   );
 }

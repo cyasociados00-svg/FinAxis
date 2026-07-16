@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { addMonths, addWeeks, addDays } from "date-fns";
-import { generateInstallments } from "./finance-math";
+import { generateInstallments, addPeriods } from "./finance-math";
 import { cloud, bg, fetchSnapshot } from "./cloud-sync";
 
 export type TxType = "income" | "expense";
@@ -101,19 +101,17 @@ export type ProgrammedSaving = {
   id: string;
   name: string;
   sourceAccountId: string;      // account id for recurring deposits, or EXTERNAL_ORIGIN
-  amountPYG: number;            // deposit per period
+  amountPYG: number;            // deposit per period (cuota)
   frequency: ScheduledFrequency;
   tna: number;                  // fixed annual interest rate (%)
-  termPeriods: number;          // total number of deposits (0 = open-ended)
-  openingPYG: number;           // pre-existing balance at start (immutable)
-  depositedPYG: number;         // principal: opening balance + all deposits
-  balancePYG: number;           // principal + interest accrued up to lastAccrual
-  goalPYG: number;              // target amount (0 = no goal); ignored when termPeriods > 0
-  goalDate?: string;            // optional target date (ISO)
-  nextRun: string;              // next scheduled deposit (ISO)
-  lastAccrual: string;          // last date interest was accrued (ISO)
+  termPeriods: number;          // plazo: total number of deposits
+  startDate: string;            // plan start (ISO); deposits at start + k periods
+  openingPYG: number;           // extra prior contribution — adds to progress, NOT to the meta
+  nextRun: string;              // engine cursor: next future deposit still to debit (ISO)
   active: boolean;
   createdAt: string;
+  // Derived at read time from the fields above: meta = amountPYG * termPeriods,
+  // endDate = start + term periods, aportado = elapsed deposits + openingPYG.
 };
 
 // ─── State type ───────────────────────────────────────────────────────────────
@@ -173,10 +171,9 @@ type State = {
     of: number;
     firstDueDate: string; // ISO date of the `current` installment
   }) => void;
-  addProgrammedSaving: (s: Omit<ProgrammedSaving, "id" | "createdAt" | "depositedPYG" | "balancePYG" | "lastAccrual">) => void;
+  addProgrammedSaving: (s: Omit<ProgrammedSaving, "id" | "createdAt" | "nextRun">) => void;
   updateProgrammedSaving: (id: string, patch: Partial<Omit<ProgrammedSaving, "id">>) => void;
   deleteProgrammedSaving: (id: string) => void;
-  depositToSaving: (id: string, amountPYG: number, accountId?: string) => void;
   runProgrammedSavings: () => void;
   resetData: () => Promise<void>;
 };
@@ -221,7 +218,6 @@ const initial: Omit<
   | "addProgrammedSaving"
   | "updateProgrammedSaving"
   | "deleteProgrammedSaving"
-  | "depositToSaving"
   | "runProgrammedSavings"
   | "resetData"
 > = {
@@ -626,17 +622,17 @@ export const useStore = create<State>()(
 
       // ── Programmed savings ───────────────────────────────────────────────────
       addProgrammedSaving: (s) => {
-        const opening = s.openingPYG ?? 0;
         const nowISO = new Date().toISOString();
-        const saving: ProgrammedSaving = {
-          ...s,
-          openingPYG: opening,
-          id: uid(),
-          depositedPYG: opening,
-          balancePYG: opening,
-          lastAccrual: nowISO,
-          createdAt: nowISO,
-        };
+        const now = new Date();
+        // Engine cursor: first deposit date strictly after "now". Deposits that
+        // already elapsed before creating the plan are prior contributions and
+        // are never debited from an account.
+        let nextRun = addPeriods(s.startDate, s.frequency, s.termPeriods).toISOString();
+        for (let k = 1; k <= s.termPeriods; k++) {
+          const d = addPeriods(s.startDate, s.frequency, k);
+          if (d > now) { nextRun = d.toISOString(); break; }
+        }
+        const saving: ProgrammedSaving = { ...s, id: uid(), nextRun, createdAt: nowISO };
         set((st) => ({ programmedSavings: [...st.programmedSavings, saving] }));
         bg(cloud.saveProgrammedSaving(saving));
       },
@@ -651,50 +647,21 @@ export const useStore = create<State>()(
         set((s) => ({ programmedSavings: s.programmedSavings.filter((x) => x.id !== id) }));
         bg(cloud.deleteProgrammedSaving(id));
       },
-      // Add a one-off deposit now. Accrues pending interest first, then adds the
-      // deposit to both principal and balance. Deducts from an account unless the
-      // source is external / capital previo.
-      depositToSaving: (id, amountPYG, accountId) => {
-        if (amountPYG <= 0) return;
-        const sv = get().programmedSavings.find((x) => x.id === id);
-        if (!sv) return;
-        const src = accountId ?? sv.sourceAccountId;
-        if (src && src !== EXTERNAL_ORIGIN) {
-          const acc = get().accounts.find((a) => a.id === src);
-          if (acc) {
-            get().addTransaction({
-              type: "expense",
-              method: acc.kind,
-              amount: amountPYG,
-              concept: `Ahorro programado · ${sv.name}`,
-              category: "Ahorro",
-              accountId: src,
-            });
-          }
-        }
-        const nowISO = new Date().toISOString();
-        const days = Math.max(0, (Date.now() - new Date(sv.lastAccrual).getTime()) / 86400000);
-        const interest = sv.balancePYG * (sv.tna / 100) * (days / 365);
-        get().updateProgrammedSaving(id, {
-          depositedPYG: sv.depositedPYG + amountPYG,
-          balancePYG: sv.balancePYG + interest + amountPYG,
-          lastAccrual: nowISO,
-        });
-      },
+      // Debit the account for deposits that come due while using the app. Only
+      // future deposits (after the plan was created) are processed; already
+      // elapsed cuotas are treated as prior contributions and never debited.
       runProgrammedSavings: () => {
         const now = new Date();
-        const list = get().programmedSavings;
-        for (const s of list) {
+        for (const s of get().programmedSavings) {
           if (!s.active) continue;
+          const end = addPeriods(s.startDate, s.frequency, s.termPeriods).getTime();
+          const external = !s.sourceAccountId || s.sourceAccountId === EXTERNAL_ORIGIN;
           let next = s.nextRun;
           let safety = 0;
-          while (new Date(next) <= now && safety < 120) {
-            const external = !s.sourceAccountId || s.sourceAccountId === EXTERNAL_ORIGIN;
-            const acc = external ? null : get().accounts.find((a) => a.id === s.sourceAccountId);
-            // If funded from an account, require sufficient balance to proceed.
-            if (!external && (!acc || acc.balancePYG < s.amountPYG)) break;
-
-            if (acc) {
+          while (new Date(next) <= now && new Date(next).getTime() <= end && safety < 200) {
+            if (!external) {
+              const acc = get().accounts.find((a) => a.id === s.sourceAccountId);
+              if (!acc || acc.balancePYG < s.amountPYG) break;
               get().addTransaction({
                 type: "expense",
                 method: acc.kind,
@@ -705,23 +672,10 @@ export const useStore = create<State>()(
                 date: next,
               });
             }
-
-            // Accrue interest on the running balance up to this deposit date,
-            // then add the deposit to principal + balance.
-            const cur = get().programmedSavings.find((x) => x.id === s.id);
-            if (!cur) break;
-            const days = Math.max(0, (new Date(next).getTime() - new Date(cur.lastAccrual).getTime()) / 86400000);
-            const interest = cur.balancePYG * (cur.tna / 100) * (days / 365);
-            get().updateProgrammedSaving(s.id, {
-              depositedPYG: cur.depositedPYG + s.amountPYG,
-              balancePYG: cur.balancePYG + interest + s.amountPYG,
-              lastAccrual: next,
-              nextRun: advance(next, s.frequency),
-            });
-
             next = advance(next, s.frequency);
             safety++;
           }
+          if (next !== s.nextRun) get().updateProgrammedSaving(s.id, { nextRun: next });
         }
       },
 

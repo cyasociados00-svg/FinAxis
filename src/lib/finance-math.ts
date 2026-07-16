@@ -1,5 +1,47 @@
-import { addMonths, differenceInDays, format, startOfMonth } from "date-fns";
+import { addDays, addMonths, differenceInDays, format, startOfMonth } from "date-fns";
 import type { CDA, Installment, Transaction } from "./store";
+
+type Freq = "weekly" | "biweekly" | "monthly";
+
+// Date of a deposit k periods after a start date.
+export function addPeriods(dateISO: string, freq: Freq, k: number): Date {
+  const d = new Date(dateISO);
+  if (freq === "weekly") return addDays(d, 7 * k);
+  if (freq === "biweekly") return addDays(d, 14 * k);
+  return addMonths(d, k);
+}
+
+// Whole periods between two dates for a frequency (used to derive plazo).
+export function periodsBetween(startISO: string, endISO: string, freq: Freq): number {
+  const days = Math.max(0, differenceInDays(new Date(endISO), new Date(startISO)));
+  if (freq === "weekly") return Math.round(days / 7);
+  if (freq === "biweekly") return Math.round(days / 14);
+  // months
+  const s = new Date(startISO);
+  const e = new Date(endISO);
+  return Math.max(0, (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()));
+}
+
+// Derived state of a programmed savings plan as of `asOf`.
+// Deposits fall at start + k periods (k = 1..term); the last one lands on the
+// end date. Already-elapsed deposits are treated as capital already contributed.
+export function savingSchedule(
+  s: { amountPYG: number; frequency: Freq; termPeriods: number; startDate: string; tna: number; openingPYG: number },
+  asOf: Date = new Date(),
+) {
+  const meta = s.amountPYG * s.termPeriods;               // total to save (no interest)
+  const endDate = addPeriods(s.startDate, s.frequency, s.termPeriods).toISOString();
+  let elapsed = 0;
+  for (let k = 1; k <= s.termPeriods; k++) {
+    if (addPeriods(s.startDate, s.frequency, k) <= asOf) elapsed++;
+  }
+  const pendingCount = Math.max(0, s.termPeriods - elapsed);
+  const aportadoCuotas = elapsed * s.amountPYG;
+  const aportado = aportadoCuotas + (s.openingPYG || 0);  // opening adds to progress, not to meta
+  const pending = pendingCount * s.amountPYG;
+  const est = savingsProjection({ amount: s.amountPYG, periods: s.termPeriods, annualRatePct: s.tna, freq: s.frequency });
+  return { meta, endDate, elapsed, pendingCount, aportadoCuotas, aportado, pending, estimadoConInteres: est.finalValue };
+}
 
 export const monthlyInstallment = (amount: number, n: number) => amount / n;
 
