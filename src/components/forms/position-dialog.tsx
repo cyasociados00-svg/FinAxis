@@ -164,6 +164,7 @@ const COINGECKO_PRESETS = [
   { id: "tether", symbol: "USDT" },
   { id: "usd-coin", symbol: "USDC" },
   { id: "binancecoin", symbol: "BNB" },
+  { id: "pax-gold", symbol: "PAXG" }, // Oro tokenizado (1 PAXG ≈ 1 oz troy de oro)
 ];
 
 export function CryptoDialog({ open, onOpenChange, position }: CryptoProps) {
