@@ -49,6 +49,13 @@ export type Account = {
   id: string;
   name: string;
   kind: "cash" | "debit";
+  currency: "PYG" | "USD";
+  // PYG accounts: balancePYG is the ground truth, mutated by PYG deltas.
+  // USD accounts: balanceUSD is the ground truth; balancePYG is a live mirror
+  // (balanceUSD * exchangeRate) kept in sync on every mutation and whenever
+  // the global exchange rate changes, so the rest of the app can keep
+  // reading balancePYG unchanged.
+  balanceUSD?: number;
   balancePYG: number;
   createdAt: string;
 };
@@ -248,6 +255,19 @@ function advance(dateISO: string, freq: ScheduledFrequency): string {
   return addMonths(d, 1).toISOString();
 }
 
+// Apply a PYG-denominated delta to an account. Transaction amounts are always
+// PYG; for a USD account the delta is converted at the given rate and
+// balanceUSD is the ground truth, with balancePYG kept as a live mirror so
+// every other reader (Tesorería, useTotals, account pickers) stays correct
+// without knowing about currencies.
+function applyAccountDeltaPYG(a: Account, deltaPYG: number, rate: number): Account {
+  if (a.currency === "USD") {
+    const nextUSD = (a.balanceUSD ?? 0) + (rate > 0 ? deltaPYG / rate : 0);
+    return { ...a, balanceUSD: nextUSD, balancePYG: nextUSD * rate };
+  }
+  return { ...a, balancePYG: a.balancePYG + deltaPYG };
+}
+
 function revertTxEffects(state: State, tx: Transaction) {
   let cards = state.cards;
   let accounts = state.accounts;
@@ -263,11 +283,8 @@ function revertTxEffects(state: State, tx: Transaction) {
     const card = cards.find((c) => c.id === tx.cardId);
     if (card) bg(cloud.saveCard(card));
   } else if ((tx.method === "cash" || tx.method === "debit") && tx.accountId && !hasInstallments) {
-    accounts = accounts.map((a) => {
-      if (a.id !== tx.accountId) return a;
-      const delta = tx.type === "income" ? -tx.amount : tx.amount;
-      return { ...a, balancePYG: a.balancePYG + delta };
-    });
+    const delta = tx.type === "income" ? -tx.amount : tx.amount;
+    accounts = accounts.map((a) => (a.id === tx.accountId ? applyAccountDeltaPYG(a, delta, state.exchangeRate) : a));
     const acc = accounts.find((a) => a.id === tx.accountId);
     if (acc) bg(cloud.saveAccount(acc));
   }
@@ -279,7 +296,7 @@ function revertTxEffects(state: State, tx: Transaction) {
   return { cards, accounts, installments };
 }
 
-function applyTxEffects(cards: CreditCard[], accounts: Account[], installments: Installment[], tx: Transaction) {
+function applyTxEffects(cards: CreditCard[], accounts: Account[], installments: Installment[], tx: Transaction, rate: number) {
   let nextCards = cards;
   let nextAccounts = accounts;
   let nextInst = installments;
@@ -295,11 +312,8 @@ function applyTxEffects(cards: CreditCard[], accounts: Account[], installments: 
     if (card) bg(cloud.saveCard(card));
     if (newInst.length) bg(cloud.saveInstallments(newInst));
   } else if ((tx.method === "cash" || tx.method === "debit") && tx.accountId) {
-    nextAccounts = accounts.map((a) => {
-      if (a.id !== tx.accountId) return a;
-      const delta = tx.type === "income" ? tx.amount : -tx.amount;
-      return { ...a, balancePYG: a.balancePYG + delta };
-    });
+    const delta = tx.type === "income" ? tx.amount : -tx.amount;
+    nextAccounts = accounts.map((a) => (a.id === tx.accountId ? applyAccountDeltaPYG(a, delta, rate) : a));
     const acc = nextAccounts.find((a) => a.id === tx.accountId);
     if (acc) bg(cloud.saveAccount(acc));
   }
@@ -322,19 +336,40 @@ export const useStore = create<State>()(
       clearLocal: () => set({ ...initial, hydrated: true }),
 
       setExchangeRate: (n) => {
-        set({ exchangeRate: n });
+        set((s) => ({
+          exchangeRate: n,
+          // Re-mirror every USD account's PYG value at the new rate so
+          // Tesorería/Resumen/pickers stay correct without re-reading the rate.
+          accounts: s.accounts.map((a) =>
+            a.currency === "USD" ? { ...a, balancePYG: (a.balanceUSD ?? 0) * n } : a,
+          ),
+        }));
         bg(cloud.saveExchangeRate(n));
       },
 
       // ── Accounts ────────────────────────────────────────────────────────────
       addAccount: (a) => {
-        const acc: Account = { ...a, id: uid(), createdAt: new Date().toISOString() };
+        const rate = get().exchangeRate;
+        const isUSD = a.currency === "USD";
+        const acc: Account = {
+          ...a,
+          id: uid(),
+          createdAt: new Date().toISOString(),
+          balancePYG: isUSD ? (a.balanceUSD ?? 0) * rate : a.balancePYG,
+        };
         set((s) => ({ accounts: [...s.accounts, acc] }));
         bg(cloud.saveAccount(acc));
       },
       updateAccount: (id, patch) =>
         set((s) => {
-          const next = s.accounts.map((a) => (a.id === id ? { ...a, ...patch } : a));
+          const rate = s.exchangeRate;
+          const next = s.accounts.map((a) => {
+            if (a.id !== id) return a;
+            const merged = { ...a, ...patch };
+            // Keep the PYG mirror in sync if currency or the USD amount changed.
+            if (merged.currency === "USD") return { ...merged, balancePYG: (merged.balanceUSD ?? 0) * rate };
+            return merged;
+          });
           const updated = next.find((a) => a.id === id);
           if (updated) bg(cloud.saveAccount(updated));
           return { accounts: next };
@@ -350,7 +385,7 @@ export const useStore = create<State>()(
         const date = t.date ?? new Date().toISOString();
         const tx: Transaction = { ...t, id, date };
         set((s) => {
-          const eff = applyTxEffects(s.cards, s.accounts, s.installments, tx);
+          const eff = applyTxEffects(s.cards, s.accounts, s.installments, tx, s.exchangeRate);
           return { transactions: [tx, ...s.transactions], ...eff };
         });
         bg(cloud.saveTransaction(tx));
@@ -361,7 +396,7 @@ export const useStore = create<State>()(
           if (!prev) return {};
           const reverted = revertTxEffects(s, prev);
           const next: Transaction = { ...prev, ...patch };
-          const eff = applyTxEffects(reverted.cards, reverted.accounts, reverted.installments, next);
+          const eff = applyTxEffects(reverted.cards, reverted.accounts, reverted.installments, next, s.exchangeRate);
           bg(cloud.saveTransaction(next));
           return { transactions: s.transactions.map((t) => (t.id === id ? next : t)), ...eff };
         }),

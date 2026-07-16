@@ -2,7 +2,7 @@
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useStore, type CreditCard, type Account } from "@/lib/store";
-import { formatPYG, formatPct } from "@/lib/format";
+import { formatPYG, formatPct, formatUSD } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -77,7 +77,16 @@ function Tesoreria() {
                   <td className="px-3 py-3 text-xs text-muted-foreground">
                     {a.kind === "cash" ? "Efectivo" : "Cuenta bancaria"}
                   </td>
-                  <td className="num px-3 py-3 text-right font-mono">{formatPYG(a.balancePYG)}</td>
+                  <td className="num px-3 py-3 text-right font-mono">
+                    {a.currency === "USD" ? (
+                      <>
+                        <div>{formatUSD(a.balanceUSD ?? 0)}</div>
+                        <div className="text-[11px] font-normal text-muted-foreground">≈ {formatPYG(a.balancePYG)}</div>
+                      </>
+                    ) : (
+                      formatPYG(a.balancePYG)
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-right">
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setAccEditing(a); setAccOpen(true); }}>
                       <Pencil className="h-3.5 w-3.5" />

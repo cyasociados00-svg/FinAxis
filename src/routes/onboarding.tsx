@@ -41,7 +41,7 @@ function OnboardingPage() {
   function addAccountLocal(e: React.FormEvent) {
     e.preventDefault();
     if (!accName) return;
-    addAccount({ name: accName, kind: accKind, balancePYG: Number(accBalance) || 0 });
+    addAccount({ name: accName, kind: accKind, currency: "PYG", balancePYG: Number(accBalance) || 0 });
     setAccName(""); setAccBalance("");
   }
 

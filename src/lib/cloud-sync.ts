@@ -21,6 +21,8 @@ export const accountFromRow = (r: any): Account => ({
   id: r.id,
   name: r.name,
   kind: r.kind,
+  currency: r.currency === "USD" ? "USD" : "PYG",
+  balanceUSD: r.balance_usd != null ? Number(r.balance_usd) : undefined,
   balancePYG: Number(r.balance_pyg) || 0,
   createdAt: r.created_at ?? new Date().toISOString(),
 });
@@ -29,6 +31,8 @@ const accountToRow = (a: Account, uid: string) => ({
   user_id: uid,
   name: a.name,
   kind: a.kind,
+  currency: a.currency ?? "PYG",
+  balance_usd: a.balanceUSD ?? null,
   balance_pyg: a.balancePYG,
 });
 
