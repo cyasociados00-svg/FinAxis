@@ -76,7 +76,9 @@ export function ProgrammedSavingDialog({ open, onOpenChange, saving }: Props) {
       setSourceAccountId(saving.sourceAccountId || EXTERNAL_ORIGIN);
     } else {
       setName(""); setAmount(""); setFrequency("monthly"); setTna("0");
-      setStartStr(toYMD(new Date())); setTermStr("12"); setEndStr("");
+      // All three blank so the user can type in any two (incl. inicio + fin);
+      // the remaining box auto-computes and locks only once two are filled.
+      setStartStr(""); setTermStr(""); setEndStr("");
       setOpening("");
       setSourceAccountId(accounts[0]?.id ?? EXTERNAL_ORIGIN);
     }
