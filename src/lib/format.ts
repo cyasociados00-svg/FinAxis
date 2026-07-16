@@ -22,6 +22,7 @@ export const formatNumber = (n: number, d = 0) =>
   }).format(n);
 export const formatDate = (d: string | Date) => {
   const date = typeof d === "string" ? new Date(d) : d;
+  if (!date || isNaN(date.getTime())) return "-";
   return new Intl.DateTimeFormat("es-PY", {
     day: "2-digit",
     month: "2-digit",

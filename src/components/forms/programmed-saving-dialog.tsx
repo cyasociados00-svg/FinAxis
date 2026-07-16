@@ -18,17 +18,22 @@ type Props = {
 };
 
 function toYMD(d: Date) {
+  if (isNaN(d.getTime())) return "";
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+function isValidYMD(s: string) {
+  return !!s && !isNaN(new Date(`${s}T12:00:00`).getTime());
+}
 function ymdToISO(s: string) {
-  return new Date(`${s}T12:00:00`).toISOString();
+  const d = new Date(`${s}T12:00:00`);
+  return isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
 // Fill in whichever of {inicio, plazo, fin} was left blank from the other two.
 function triangulate(startStr: string, termStr: string, endStr: string, freq: ScheduledFrequency) {
-  const hasStart = !!startStr;
+  const hasStart = isValidYMD(startStr);
   const hasTerm = Number(termStr) > 0;
-  const hasEnd = !!endStr;
+  const hasEnd = isValidYMD(endStr);
   const filled = [hasStart, hasTerm, hasEnd].filter(Boolean).length;
   let start = startStr, term = termStr, end = endStr;
   let computed: "start" | "term" | "end" | null = null;

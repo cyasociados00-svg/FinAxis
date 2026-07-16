@@ -29,17 +29,27 @@ export function savingSchedule(
   s: { amountPYG: number; frequency: Freq; termPeriods: number; startDate: string; tna: number; openingPYG: number },
   asOf: Date = new Date(),
 ) {
-  const meta = s.amountPYG * s.termPeriods;               // total to save (no interest)
-  const endDate = addPeriods(s.startDate, s.frequency, s.termPeriods).toISOString();
+  const term = Math.max(0, Math.floor(s.termPeriods || 0));
+  const meta = s.amountPYG * term;                        // total to save (no interest)
+  const start = new Date(s.startDate);
+  // Guard against missing/invalid start date (e.g. legacy records) so callers
+  // never crash on an Invalid Date .toISOString().
+  if (isNaN(start.getTime()) || term === 0) {
+    return {
+      meta, endDate: new Date().toISOString(), elapsed: 0, pendingCount: term,
+      aportadoCuotas: 0, aportado: s.openingPYG || 0, pending: meta, estimadoConInteres: 0,
+    };
+  }
+  const endDate = addPeriods(s.startDate, s.frequency, term).toISOString();
   let elapsed = 0;
-  for (let k = 1; k <= s.termPeriods; k++) {
+  for (let k = 1; k <= term; k++) {
     if (addPeriods(s.startDate, s.frequency, k) <= asOf) elapsed++;
   }
-  const pendingCount = Math.max(0, s.termPeriods - elapsed);
+  const pendingCount = Math.max(0, term - elapsed);
   const aportadoCuotas = elapsed * s.amountPYG;
   const aportado = aportadoCuotas + (s.openingPYG || 0);  // opening adds to progress, not to meta
   const pending = pendingCount * s.amountPYG;
-  const est = savingsProjection({ amount: s.amountPYG, periods: s.termPeriods, annualRatePct: s.tna, freq: s.frequency });
+  const est = savingsProjection({ amount: s.amountPYG, periods: term, annualRatePct: s.tna, freq: s.frequency });
   return { meta, endDate, elapsed, pendingCount, aportadoCuotas, aportado, pending, estimadoConInteres: est.finalValue };
 }
 
