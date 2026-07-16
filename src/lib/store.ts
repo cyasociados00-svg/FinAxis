@@ -164,6 +164,16 @@ type State = {
   addFundContribution: (id: string, amount: number) => void;
   setFundValue: (id: string, value: number) => void;
   payInstallment: (id: string, opts?: { accountId?: string }) => void;
+  addInstallmentPlan: (p: {
+    concept: string;
+    cardId?: string;
+    accountId?: string;
+    cuotaAmount: number;
+    current: number; // next unpaid installment number
+    of: number;
+    firstDueDate: string; // ISO date of the `current` installment
+    category?: string;
+  }) => void;
   addProgrammedSaving: (s: Omit<ProgrammedSaving, "id" | "createdAt" | "depositedPYG" | "balancePYG" | "lastAccrual">) => void;
   updateProgrammedSaving: (id: string, patch: Partial<Omit<ProgrammedSaving, "id">>) => void;
   deleteProgrammedSaving: (id: string) => void;
@@ -208,6 +218,7 @@ const initial: Omit<
   | "addFundContribution"
   | "setFundValue"
   | "payInstallment"
+  | "addInstallmentPlan"
   | "addProgrammedSaving"
   | "updateProgrammedSaving"
   | "deleteProgrammedSaving"
@@ -247,13 +258,16 @@ function revertTxEffects(state: State, tx: Transaction) {
   let accounts = state.accounts;
   let installments = state.installments;
 
+  // A transaction that owns installments is an installment plan. Its balance
+  // effect (if any) lives on the card; an account-based plan moved no money at
+  // creation, so its account must not be adjusted here.
+  const hasInstallments = installments.some((i) => i.transactionId === tx.id);
+
   if (tx.method === "credit" && tx.cardId) {
     cards = cards.map((c) => (c.id === tx.cardId ? { ...c, balancePYG: c.balancePYG - tx.amount } : c));
-    installments = installments.filter((i) => i.transactionId !== tx.id);
     const card = cards.find((c) => c.id === tx.cardId);
     if (card) bg(cloud.saveCard(card));
-    bg(cloud.deleteInstallmentsByTx(tx.id));
-  } else if ((tx.method === "cash" || tx.method === "debit") && tx.accountId) {
+  } else if ((tx.method === "cash" || tx.method === "debit") && tx.accountId && !hasInstallments) {
     accounts = accounts.map((a) => {
       if (a.id !== tx.accountId) return a;
       const delta = tx.type === "income" ? -tx.amount : tx.amount;
@@ -261,6 +275,11 @@ function revertTxEffects(state: State, tx: Transaction) {
     });
     const acc = accounts.find((a) => a.id === tx.accountId);
     if (acc) bg(cloud.saveAccount(acc));
+  }
+
+  if (hasInstallments) {
+    installments = installments.filter((i) => i.transactionId !== tx.id);
+    bg(cloud.deleteInstallmentsByTx(tx.id));
   }
   return { cards, accounts, installments };
 }
@@ -556,6 +575,63 @@ export const useStore = create<State>()(
             category: "Pago tarjeta",
             accountId: opts.accountId,
           });
+        }
+      },
+
+      // Register a pre-existing installment plan already in progress (e.g. 7/12).
+      // Only the remaining installments (current..of) are created, and — for a
+      // card — only the outstanding amount is added to the card balance. Bypasses
+      // the normal transaction effects to control numbering and the partial total.
+      addInstallmentPlan: (p) => {
+        const of = Math.max(1, Math.floor(p.of));
+        const current = Math.min(of, Math.max(1, Math.floor(p.current)));
+        const remaining = of - current + 1;
+        const outstanding = p.cuotaAmount * remaining;
+        const txId = uid();
+        const first = new Date(p.firstDueDate);
+
+        const tx: Transaction = {
+          id: txId,
+          date: p.firstDueDate,
+          type: "expense",
+          amount: outstanding,
+          concept: p.concept,
+          category: p.category ?? "Cuotas",
+          method: p.cardId ? "credit" : "debit",
+          cardId: p.cardId,
+          accountId: p.cardId ? undefined : p.accountId,
+          installments: of,
+        };
+
+        const newInst: Installment[] = [];
+        for (let k = current; k <= of; k++) {
+          newInst.push({
+            id: `${txId}-${k}`,
+            transactionId: txId,
+            number: k,
+            of,
+            amount: p.cuotaAmount,
+            dueDate: addMonths(first, k - current).toISOString(),
+            paid: false,
+          });
+        }
+
+        set((s) => {
+          const cards = p.cardId
+            ? s.cards.map((c) => (c.id === p.cardId ? { ...c, balancePYG: c.balancePYG + outstanding } : c))
+            : s.cards;
+          return {
+            transactions: [tx, ...s.transactions],
+            installments: [...s.installments, ...newInst],
+            cards,
+          };
+        });
+
+        bg(cloud.saveTransaction(tx));
+        bg(cloud.saveInstallments(newInst));
+        if (p.cardId) {
+          const card = get().cards.find((c) => c.id === p.cardId);
+          if (card) bg(cloud.saveCard(card));
         }
       },
 

@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { useStore, type Installment } from "@/lib/store";
 import { formatPYG, formatDate } from "@/lib/format";
-import { CheckCircle2, Clock } from "lucide-react";
+import { CheckCircle2, Clock, Plus } from "lucide-react";
+import { InstallmentPlanDialog } from "@/components/forms/installment-plan-dialog";
 
 export const Route = createFileRoute("/cuotas")({
   head: () => ({ meta: [{ title: "Cuotas - FinAxis" }] }),
@@ -28,6 +29,7 @@ function CuotasPage() {
   const [paying, setPaying] = useState<Installment | null>(null);
   const [accountId, setAccountId] = useState<string>("");
   const [mode, setMode] = useState<"now" | "already">("now");
+  const [planOpen, setPlanOpen] = useState(false);
 
   const rows = installments
     .filter((i) => (filter === "pending" ? !i.paid : true))
@@ -35,7 +37,8 @@ function CuotasPage() {
     .map((i) => {
       const tx = transactions.find((t) => t.id === i.transactionId);
       const card = tx?.cardId ? cards.find((c) => c.id === tx.cardId) : null;
-      return { inst: i, tx, card };
+      const account = !card && tx?.accountId ? accounts.find((a) => a.id === tx.accountId) : null;
+      return { inst: i, tx, card, account };
     });
 
   const totalPending = installments.filter((i) => !i.paid).reduce((a, x) => a + x.amount, 0);
@@ -63,6 +66,9 @@ function CuotasPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setPlanOpen(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Cargar cuotas existentes
+            </Button>
             <Button size="sm" variant={filter === "pending" ? "default" : "outline"} onClick={() => setFilter("pending")}>Pendientes</Button>
             <Button size="sm" variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")}>Todas</Button>
           </div>
@@ -71,7 +77,7 @@ function CuotasPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">Tarjeta</th>
+                <th className="px-3 py-2 text-left font-medium">Tarjeta/Cuenta</th>
                 <th className="px-3 py-2 text-left font-medium">Concepto</th>
                 <th className="px-3 py-2 text-right font-medium">Cuota</th>
                 <th className="px-3 py-2 text-right font-medium">Monto</th>
@@ -81,9 +87,9 @@ function CuotasPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ inst, tx, card }) => (
+              {rows.map(({ inst, tx, card, account }) => (
                 <tr key={inst.id} className="border-t">
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{card?.name ?? "-"}</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">{card?.name ?? account?.name ?? "-"}</td>
                   <td className="px-3 py-2">{tx?.concept ?? "-"}</td>
                   <td className="num px-3 py-2 text-right font-mono text-xs">{inst.number}/{inst.of}</td>
                   <td className="num px-3 py-2 text-right font-mono">{formatPYG(inst.amount)}</td>
@@ -158,6 +164,8 @@ function CuotasPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <InstallmentPlanDialog open={planOpen} onOpenChange={setPlanOpen} />
     </AppShell>
   );
 }
