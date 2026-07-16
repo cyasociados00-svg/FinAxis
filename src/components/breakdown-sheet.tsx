@@ -148,6 +148,7 @@ function NetWorthBreakdown() {
     { label: "Cash & Bancos (PYG)", value: t.cashPYG, sign: 1 },
     { label: "CDAs (valor devengado)", value: t.cdasPYG, sign: 1 },
     { label: "Fondos Mutuos", value: t.fundsPYG, sign: 1 },
+    { label: "Ahorro Programado (aportado)", value: t.savingsPYG, sign: 1 },
     { label: `Acciones EE.UU. (${formatUSD(t.stocksUSD)} × ${rate.toLocaleString("es-PY")})`, value: t.stocksPYG, sign: 1 },
     { label: `Cripto (${formatUSD(t.cryptoUSD)} × ${rate.toLocaleString("es-PY")})`, value: t.cryptoPYG, sign: 1 },
     { label: "Deuda tarjetas", value: t.debtPYG, sign: -1 },

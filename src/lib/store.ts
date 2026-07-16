@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { addMonths, addWeeks, addDays } from "date-fns";
-import { generateInstallments, addPeriods } from "./finance-math";
+import { generateInstallments, addPeriods, savingSchedule } from "./finance-math";
 import { cloud, bg, fetchSnapshot } from "./cloud-sync";
 
 export type TxType = "income" | "expense";
@@ -749,11 +749,13 @@ export const useTotals = () => {
     const days = Math.max(0, (ref.getTime() - issued.getTime()) / 86400000);
     return a + c.capital + (c.capital * (c.tna / 100) * days) / 365;
   }, 0);
+  // Programmed savings: the money already contributed today (aportado).
+  const savingsPYG = s.programmedSavings.reduce((a, x) => a + savingSchedule(x).aportado, 0);
   const futureInstallments = s.installments.filter((i) => !i.paid).reduce((a, x) => a + x.amount, 0);
   const liquid = cashPYG;
   // contingent = card balance only; futureInstallments are already included in debtPYG
   const contingent = debtPYG;
-  const net = liquid + cdasPYG + fundsPYG + stocksPYG + cryptoPYG - debtPYG;
+  const net = liquid + cdasPYG + fundsPYG + stocksPYG + cryptoPYG + savingsPYG - debtPYG;
   return {
     cashPYG,
     debtPYG,
@@ -763,6 +765,7 @@ export const useTotals = () => {
     cryptoPYG,
     fundsPYG,
     cdasPYG,
+    savingsPYG,
     futureInstallments,
     liquid,
     contingent,

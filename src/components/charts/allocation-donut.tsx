@@ -13,7 +13,7 @@ export function AllocationDonut() {
   const t = useTotals();
   const data = [
     { name: "Renta Variable", value: Math.round(t.stocksPYG) },
-    { name: "Renta Fija", value: Math.round(t.cdasPYG + t.fundsPYG) },
+    { name: "Renta Fija / Ahorro", value: Math.round(t.cdasPYG + t.fundsPYG + t.savingsPYG) },
     { name: "Cripto", value: Math.round(t.cryptoPYG) },
     { name: "Cash", value: Math.round(t.cashPYG) },
   ];

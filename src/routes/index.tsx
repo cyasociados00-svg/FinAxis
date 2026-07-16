@@ -103,6 +103,7 @@ function Dashboard() {
             <Row label="Cash & Bancos (PYG)" value={formatPYG(t.cashPYG)} />
             <Row label="CDAs devengados" value={formatPYG(t.cdasPYG)} />
             <Row label="Fondos Mutuos" value={formatPYG(t.fundsPYG)} />
+            <Row label="Ahorro Programado" value={formatPYG(t.savingsPYG)} />
             <Row label="Acciones EE.UU." value={formatPYG(t.stocksPYG)} sub={formatUSD(t.stocksUSD)} />
             <Row label="Cripto" value={formatPYG(t.cryptoPYG)} sub={formatUSD(t.cryptoUSD)} />
             <div className="my-2 border-t" />
