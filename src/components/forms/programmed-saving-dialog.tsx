@@ -17,13 +17,34 @@ type Props = {
   saving?: ProgrammedSaving | null;
 };
 
-type Mode = "start_term" | "end_term" | "start_end";
-
 function toYMD(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function ymdToISO(s: string) {
   return new Date(`${s}T12:00:00`).toISOString();
+}
+
+// Fill in whichever of {inicio, plazo, fin} was left blank from the other two.
+function triangulate(startStr: string, termStr: string, endStr: string, freq: ScheduledFrequency) {
+  const hasStart = !!startStr;
+  const hasTerm = Number(termStr) > 0;
+  const hasEnd = !!endStr;
+  const filled = [hasStart, hasTerm, hasEnd].filter(Boolean).length;
+  let start = startStr, term = termStr, end = endStr;
+  let computed: "start" | "term" | "end" | null = null;
+  if (filled === 2) {
+    if (!hasEnd) {
+      end = toYMD(addPeriods(ymdToISO(startStr), freq, Number(termStr)));
+      computed = "end";
+    } else if (!hasStart) {
+      start = toYMD(addPeriods(ymdToISO(endStr), freq, -Number(termStr)));
+      computed = "start";
+    } else if (!hasTerm) {
+      term = String(periodsBetween(ymdToISO(startStr), ymdToISO(endStr), freq));
+      computed = "term";
+    }
+  }
+  return { start, term, end, computed };
 }
 
 export function ProgrammedSavingDialog({ open, onOpenChange, saving }: Props) {
@@ -35,10 +56,9 @@ export function ProgrammedSavingDialog({ open, onOpenChange, saving }: Props) {
   const [amount, setAmount] = useState("");
   const [frequency, setFrequency] = useState<ScheduledFrequency>("monthly");
   const [tna, setTna] = useState("0");
-  const [mode, setMode] = useState<Mode>("start_term");
   const [startStr, setStartStr] = useState("");
-  const [endStr, setEndStr] = useState("");
   const [termStr, setTermStr] = useState("");
+  const [endStr, setEndStr] = useState("");
   const [opening, setOpening] = useState("");
   const [sourceAccountId, setSourceAccountId] = useState("");
 
@@ -49,36 +69,25 @@ export function ProgrammedSavingDialog({ open, onOpenChange, saving }: Props) {
       setAmount(String(saving.amountPYG));
       setFrequency(saving.frequency);
       setTna(String(saving.tna));
-      setMode("start_term");
       setStartStr(toYMD(new Date(saving.startDate)));
       setTermStr(String(saving.termPeriods));
-      setEndStr("");
+      setEndStr(""); // recomputed from inicio + plazo
       setOpening(saving.openingPYG ? String(saving.openingPYG) : "");
       setSourceAccountId(saving.sourceAccountId || EXTERNAL_ORIGIN);
     } else {
       setName(""); setAmount(""); setFrequency("monthly"); setTna("0");
-      setMode("start_term");
-      setStartStr(toYMD(new Date())); setEndStr(""); setTermStr("12");
+      setStartStr(toYMD(new Date())); setTermStr("12"); setEndStr("");
       setOpening("");
       setSourceAccountId(accounts[0]?.id ?? EXTERNAL_ORIGIN);
     }
   }, [open, saving, accounts]);
 
-  // Triangulate: resolve startDate (ISO) and termPeriods from the two inputs.
-  let startISO = "";
-  let term = 0;
-  if (mode === "start_term" && startStr && Number(termStr) > 0) {
-    startISO = ymdToISO(startStr);
-    term = Number(termStr);
-  } else if (mode === "end_term" && endStr && Number(termStr) > 0) {
-    term = Number(termStr);
-    startISO = addPeriods(ymdToISO(endStr), frequency, -term).toISOString();
-  } else if (mode === "start_end" && startStr && endStr) {
-    startISO = ymdToISO(startStr);
-    term = periodsBetween(startISO, ymdToISO(endStr), frequency);
-  }
+  // Fill the blank box (inicio / plazo / fin) from the other two.
+  const tri = triangulate(startStr, termStr, endStr, frequency);
+  const startISO = tri.start ? ymdToISO(tri.start) : "";
+  const term = Number(tri.term) || 0;
 
-  const valid = !!name && Number(amount) > 0 && !!startISO && term > 0 && !!sourceAccountId;
+  const valid = !!name && Number(amount) > 0 && !!startISO && term > 0 && !!tri.end && !!sourceAccountId;
 
   const sched = valid
     ? savingSchedule({ amountPYG: Number(amount), frequency, termPeriods: term, startDate: startISO, tna: Number(tna) || 0, openingPYG: Number(opening) || 0 })
@@ -136,36 +145,41 @@ export function ProgrammedSavingDialog({ open, onOpenChange, saving }: Props) {
           </div>
 
           <div>
-            <Label className="text-xs uppercase tracking-wider">Definir el plan por</Label>
-            <Select value={mode} onValueChange={(v) => setMode(v as Mode)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="start_term">Inicio + Plazo → calcula Fin</SelectItem>
-                <SelectItem value="end_term">Fin + Plazo → calcula Inicio</SelectItem>
-                <SelectItem value="start_end">Inicio + Fin → calcula Plazo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {(mode === "start_term" || mode === "start_end") && (
+            <Label className="text-xs uppercase tracking-wider">Fechas y plazo</Label>
+            <p className="mb-1 text-[11px] text-muted-foreground">
+              Completá dos y dejá en blanco el que no sepas: se calcula solo.
+            </p>
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <Label className="text-xs uppercase tracking-wider">Fecha de inicio</Label>
-                <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} />
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Inicio</Label>
+                <Input
+                  type="date"
+                  value={tri.start}
+                  disabled={tri.computed === "start"}
+                  onChange={(e) => setStartStr(e.target.value)}
+                />
               </div>
-            )}
-            {(mode === "end_term" || mode === "start_end") && (
               <div>
-                <Label className="text-xs uppercase tracking-wider">Fecha de fin</Label>
-                <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} />
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Plazo (cuotas)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  className="num font-mono"
+                  value={tri.term}
+                  disabled={tri.computed === "term"}
+                  onChange={(e) => setTermStr(e.target.value)}
+                />
               </div>
-            )}
-            {(mode === "start_term" || mode === "end_term") && (
               <div>
-                <Label className="text-xs uppercase tracking-wider">Plazo (cuotas)</Label>
-                <Input type="number" min="1" className="num font-mono" value={termStr} onChange={(e) => setTermStr(e.target.value)} />
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Fin</Label>
+                <Input
+                  type="date"
+                  value={tri.end}
+                  disabled={tri.computed === "end"}
+                  onChange={(e) => setEndStr(e.target.value)}
+                />
               </div>
-            )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
