@@ -11,8 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { useStore, type Installment } from "@/lib/store";
 import { formatPYG, formatDate } from "@/lib/format";
-import { CheckCircle2, Clock, Plus } from "lucide-react";
+import { CheckCircle2, Clock, Plus, Trash2 } from "lucide-react";
 import { InstallmentPlanDialog } from "@/components/forms/installment-plan-dialog";
+import { ConfirmDelete } from "@/components/forms/confirm-delete";
 
 export const Route = createFileRoute("/cuotas")({
   head: () => ({ meta: [{ title: "Cuotas - FinAxis" }] }),
@@ -25,11 +26,13 @@ function CuotasPage() {
   const cards = useStore((s) => s.cards);
   const accounts = useStore((s) => s.accounts);
   const payInstallment = useStore((s) => s.payInstallment);
+  const deleteTransaction = useStore((s) => s.deleteTransaction);
   const [filter, setFilter] = useState<"pending" | "all">("pending");
   const [paying, setPaying] = useState<Installment | null>(null);
   const [accountId, setAccountId] = useState<string>("");
   const [mode, setMode] = useState<"now" | "already">("now");
   const [planOpen, setPlanOpen] = useState(false);
+  const [toDeletePlan, setToDeletePlan] = useState<{ txId: string; concept: string; count: number } | null>(null);
 
   const rows = installments
     .filter((i) => (filter === "pending" ? !i.paid : true))
@@ -102,9 +105,28 @@ function CuotasPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    {!inst.paid && (
-                      <Button size="sm" variant="outline" onClick={() => openPay(inst)}>Pagar</Button>
-                    )}
+                    <div className="flex items-center justify-end gap-1">
+                      {!inst.paid && (
+                        <Button size="sm" variant="outline" onClick={() => openPay(inst)}>Pagar</Button>
+                      )}
+                      {tx && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          title="Eliminar plan de cuotas"
+                          onClick={() =>
+                            setToDeletePlan({
+                              txId: tx.id,
+                              concept: tx.concept,
+                              count: installments.filter((x) => x.transactionId === tx.id).length,
+                            })
+                          }
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -166,6 +188,17 @@ function CuotasPage() {
       </Dialog>
 
       <InstallmentPlanDialog open={planOpen} onOpenChange={setPlanOpen} />
+      <ConfirmDelete
+        open={!!toDeletePlan}
+        onOpenChange={(v) => !v && setToDeletePlan(null)}
+        title="¿Eliminar plan de cuotas?"
+        description={
+          toDeletePlan
+            ? `${toDeletePlan.concept} · se eliminarán ${toDeletePlan.count} cuota(s). Si es un plan previo no afecta saldos; si es una compra registrada en la app, se revierte su efecto.`
+            : undefined
+        }
+        onConfirm={() => { if (toDeletePlan) deleteTransaction(toDeletePlan.txId); setToDeletePlan(null); }}
+      />
     </AppShell>
   );
 }
