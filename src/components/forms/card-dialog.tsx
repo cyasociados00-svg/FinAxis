@@ -23,8 +23,8 @@ export function CardDialog({ open, onOpenChange, card }: Props) {
   const [balance, setBalance] = useState("0");
   const [closingDay, setClosingDay] = useState("20");
   const [dueDay, setDueDay] = useState("5");
-  const [tna, setTna] = useState("72");
-  const [minPct, setMinPct] = useState("10");
+  const [tna, setTna] = useState("20");
+  const [minPct, setMinPct] = useState("5");
 
   useEffect(() => {
     if (!open) return;
@@ -38,7 +38,7 @@ export function CardDialog({ open, onOpenChange, card }: Props) {
       setMinPct(String(card.minPaymentPct));
     } else {
       setName(""); setLimit(""); setBalance("0"); setClosingDay("20");
-      setDueDay("5"); setTna("72"); setMinPct("10");
+      setDueDay("5"); setTna("20"); setMinPct("5");
     }
   }, [open, card]);
 

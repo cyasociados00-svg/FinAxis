@@ -35,8 +35,8 @@ function OnboardingPage() {
   const [cardBalance, setCardBalance] = useState("0");
   const [closingDay,  setClosingDay]  = useState("20");
   const [dueDay,      setDueDay]      = useState("5");
-  const [cardTna,     setCardTna]     = useState("72");
-  const [minPct,      setMinPct]      = useState("10");
+  const [cardTna,     setCardTna]     = useState("20");
+  const [minPct,      setMinPct]      = useState("5");
 
   function addAccountLocal(e: React.FormEvent) {
     e.preventDefault();
