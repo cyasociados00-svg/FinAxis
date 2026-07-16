@@ -624,11 +624,12 @@ export const useStore = create<State>()(
       addProgrammedSaving: (s) => {
         const nowISO = new Date().toISOString();
         const now = new Date();
-        // Engine cursor: first deposit date strictly after "now". Deposits that
+        // Engine cursor: first deposit date strictly after "now". Deposit #k
+        // falls at start + (k-1) periods (#1 on the start date). Deposits that
         // already elapsed before creating the plan are prior contributions and
         // are never debited from an account.
-        let nextRun = addPeriods(s.startDate, s.frequency, s.termPeriods).toISOString();
-        for (let k = 1; k <= s.termPeriods; k++) {
+        let nextRun = addPeriods(s.startDate, s.frequency, Math.max(0, s.termPeriods - 1)).toISOString();
+        for (let k = 0; k <= s.termPeriods - 1; k++) {
           const d = addPeriods(s.startDate, s.frequency, k);
           if (d > now) { nextRun = d.toISOString(); break; }
         }
@@ -654,11 +655,12 @@ export const useStore = create<State>()(
         const now = new Date();
         for (const s of get().programmedSavings) {
           if (!s.active) continue;
-          const end = addPeriods(s.startDate, s.frequency, s.termPeriods).getTime();
+          // Last deposit falls one period before maturity (start + term).
+          const lastDeposit = addPeriods(s.startDate, s.frequency, Math.max(0, s.termPeriods - 1)).getTime();
           const external = !s.sourceAccountId || s.sourceAccountId === EXTERNAL_ORIGIN;
           let next = s.nextRun;
           let safety = 0;
-          while (new Date(next) <= now && new Date(next).getTime() <= end && safety < 200) {
+          while (new Date(next) <= now && new Date(next).getTime() <= lastDeposit && safety < 200) {
             if (!external) {
               const acc = get().accounts.find((a) => a.id === s.sourceAccountId);
               if (!acc || acc.balancePYG < s.amountPYG) break;

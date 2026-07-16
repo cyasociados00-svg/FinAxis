@@ -41,16 +41,35 @@ export function savingSchedule(
     };
   }
   const endDate = addPeriods(s.startDate, s.frequency, term).toISOString();
+  // Deposit #k falls at start + (k-1) periods: #1 on the start date itself, and
+  // #term one period before maturity (maturity = start + term). So elapsed
+  // deposits are those at offsets 0..term-1 that are already due.
   let elapsed = 0;
-  for (let k = 1; k <= term; k++) {
+  for (let k = 0; k <= term - 1; k++) {
     if (addPeriods(s.startDate, s.frequency, k) <= asOf) elapsed++;
   }
   const pendingCount = Math.max(0, term - elapsed);
   const aportadoCuotas = elapsed * s.amountPYG;
-  const aportado = aportadoCuotas + (s.openingPYG || 0);  // opening adds to progress, not to meta
+  // "Aporte previo", when set, is the real balance in the account today and
+  // REPLACES the elapsed-cuotas estimate (same money, not additional).
+  const aportado = s.openingPYG > 0 ? s.openingPYG : aportadoCuotas;
   const pending = pendingCount * s.amountPYG;
-  const est = savingsProjection({ amount: s.amountPYG, periods: term, annualRatePct: s.tna, freq: s.frequency });
-  return { meta, endDate, elapsed, pendingCount, aportadoCuotas, aportado, pending, estimadoConInteres: est.finalValue };
+
+  // Estimado a recibir: what's already inside capitalizes from its real date
+  // (the last elapsed deposit, offset term-1-... ) to maturity, plus the future
+  // annuity of the remaining cuotas. The lump travels r+1 periods (it sits one
+  // period before the first pending cuota's natural t0), the annuity travels r.
+  const i = (s.tna / 100) / periodsPerYear(s.frequency);
+  const r = pendingCount;
+  let estimadoConInteres: number;
+  if (i === 0) {
+    estimadoConInteres = aportado + s.amountPYG * r;
+  } else {
+    const lump = aportado * Math.pow(1 + i, r + 1);
+    const annuity = s.amountPYG * (((Math.pow(1 + i, r) - 1) / i) * (1 + i));
+    estimadoConInteres = lump + annuity;
+  }
+  return { meta, endDate, elapsed, pendingCount, aportadoCuotas, aportado, pending, estimadoConInteres };
 }
 
 export const monthlyInstallment = (amount: number, n: number) => amount / n;

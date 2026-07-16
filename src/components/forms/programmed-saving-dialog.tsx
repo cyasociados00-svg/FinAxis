@@ -215,7 +215,7 @@ export function ProgrammedSavingDialog({ open, onOpenChange, saving }: Props) {
                 <span className="font-mono text-foreground">{term}c · {formatDate(startISO)} → {formatDate(sched.endDate)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Ya aportado ({sched.elapsed} vencidas{Number(opening) > 0 ? " + previo" : ""})</span>
+                <span>Ya aportado ({Number(opening) > 0 ? "aporte previo" : `${sched.elapsed} cuotas vencidas`})</span>
                 <span className="num font-mono text-foreground">{formatPYG(sched.aportado)}</span>
               </div>
             </div>
