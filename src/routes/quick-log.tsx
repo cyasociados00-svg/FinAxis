@@ -16,7 +16,10 @@ export const Route = createFileRoute("/quick-log")({
 });
 
 function QuickLog() {
-  const transactions = useStore((s) => s.transactions);
+  const allTransactions = useStore((s) => s.transactions);
+  // Hide inert parents of pre-existing installment plans (they carry no amount;
+  // the real cash flow happens when each cuota is paid).
+  const transactions = allTransactions.filter((t) => t.category !== "Cuota previa");
   const deleteTransaction = useStore((s) => s.deleteTransaction);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);

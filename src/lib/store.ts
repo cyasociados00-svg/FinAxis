@@ -172,7 +172,6 @@ type State = {
     current: number; // next unpaid installment number
     of: number;
     firstDueDate: string; // ISO date of the `current` installment
-    category?: string;
   }) => void;
   addProgrammedSaving: (s: Omit<ProgrammedSaving, "id" | "createdAt" | "depositedPYG" | "balancePYG" | "lastAccrual">) => void;
   updateProgrammedSaving: (id: string, patch: Partial<Omit<ProgrammedSaving, "id">>) => void;
@@ -579,14 +578,14 @@ export const useStore = create<State>()(
       },
 
       // Register a pre-existing installment plan already in progress (e.g. 7/12).
-      // Only the remaining installments (current..of) are created, and — for a
-      // card — only the outstanding amount is added to the card balance. Bypasses
-      // the normal transaction effects to control numbering and the partial total.
+      // The current card/account balances entered at setup ALREADY include this
+      // debt, so creating the plan must NOT touch any balance (that would double
+      // count). The parent transaction is inert (amount 0) — it only links the
+      // remaining installments (current..of) for concept/card. Balances move only
+      // when each cuota is later paid.
       addInstallmentPlan: (p) => {
         const of = Math.max(1, Math.floor(p.of));
         const current = Math.min(of, Math.max(1, Math.floor(p.current)));
-        const remaining = of - current + 1;
-        const outstanding = p.cuotaAmount * remaining;
         const txId = uid();
         const first = new Date(p.firstDueDate);
 
@@ -594,9 +593,9 @@ export const useStore = create<State>()(
           id: txId,
           date: p.firstDueDate,
           type: "expense",
-          amount: outstanding,
+          amount: 0, // inert: the debt is already in the card/account balance
           concept: p.concept,
-          category: p.category ?? "Cuotas",
+          category: "Cuota previa",
           method: p.cardId ? "credit" : "debit",
           cardId: p.cardId,
           accountId: p.cardId ? undefined : p.accountId,
@@ -616,23 +615,13 @@ export const useStore = create<State>()(
           });
         }
 
-        set((s) => {
-          const cards = p.cardId
-            ? s.cards.map((c) => (c.id === p.cardId ? { ...c, balancePYG: c.balancePYG + outstanding } : c))
-            : s.cards;
-          return {
-            transactions: [tx, ...s.transactions],
-            installments: [...s.installments, ...newInst],
-            cards,
-          };
-        });
+        set((s) => ({
+          transactions: [tx, ...s.transactions],
+          installments: [...s.installments, ...newInst],
+        }));
 
         bg(cloud.saveTransaction(tx));
         bg(cloud.saveInstallments(newInst));
-        if (p.cardId) {
-          const card = get().cards.find((c) => c.id === p.cardId);
-          if (card) bg(cloud.saveCard(card));
-        }
       },
 
       // ── Programmed savings ───────────────────────────────────────────────────

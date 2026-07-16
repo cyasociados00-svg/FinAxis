@@ -115,9 +115,7 @@ export function InstallmentPlanDialog({ open, onOpenChange }: Props) {
             <div className="rounded border bg-muted/40 p-3 text-[11px] text-muted-foreground">
               Se cargarán las cuotas <span className="font-medium text-foreground">{nCurrent} a {Number(of) || 1}</span>{" "}
               ({remaining} pendientes) por <span className="num font-mono text-foreground">{formatPYG(outstanding)}</span> en total.
-              {origin.startsWith("card:")
-                ? " Se suma a la deuda de la tarjeta."
-                : " No modifica el saldo de la cuenta hasta que pagues cada cuota."}
+              No modifica saldos: esta deuda ya está incluida en el saldo actual que cargaste. Al pagar cada cuota se descuenta.
             </div>
           )}
 
