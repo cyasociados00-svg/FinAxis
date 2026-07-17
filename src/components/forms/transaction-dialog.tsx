@@ -19,9 +19,12 @@ type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   tx?: Transaction | null;
+  /** Pre-select income/expense on a fresh (non-editing) open — used by the
+   * "Registrar ingreso/gasto" home-screen shortcuts deep link. */
+  initialType?: TxType;
 };
 
-export function TransactionDialog({ open, onOpenChange, tx }: Props) {
+export function TransactionDialog({ open, onOpenChange, tx, initialType }: Props) {
   const cards = useStore((s) => s.cards);
   const accounts = useStore((s) => s.accounts); // CORREGIDO: Traemos las cuentas
   const addTransaction = useStore((s) => s.addTransaction);
@@ -53,10 +56,11 @@ export function TransactionDialog({ open, onOpenChange, tx }: Props) {
       setInstallments(String(tx.installments ?? 1));
       setDate(tx.date.slice(0, 10));
     } else {
-      setType("expense");
+      const t = initialType ?? "expense";
+      setType(t);
       setAmount("");
       setConcept("");
-      setCategory("Supermercado");
+      setCategory(t === "income" ? "Ingreso Dependiente" : "Supermercado");
       setMethod("debit");
       setCardId(cards[0]?.id ?? "");
       setAccountId(accounts[0]?.id ?? ""); // CORREGIDO: Resetear a la primera cuenta
@@ -64,7 +68,7 @@ export function TransactionDialog({ open, onOpenChange, tx }: Props) {
       const today = new Date();
       setDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`);
     }
-  }, [open, tx, cards, accounts]);
+  }, [open, tx, cards, accounts, initialType]);
 
   const cats = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 

@@ -1,21 +1,30 @@
-﻿import { createFileRoute } from "@tanstack/react-router";
+﻿import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useStore, type Transaction } from "@/lib/store";
-import { useState } from "react";
+import { useStore, type Transaction, type TxType } from "@/lib/store";
+import { useEffect, useState } from "react";
 import { formatPYG, formatDate } from "@/lib/format";
 import { Pencil, Trash2, Plus } from "lucide-react";
 import { TransactionDialog } from "@/components/forms/transaction-dialog";
 import { ConfirmDelete } from "@/components/forms/confirm-delete";
 
+// "?nuevo=gasto" / "?nuevo=ingreso" — used by the home-screen app shortcuts
+// (manifest "shortcuts") to deep-link straight into the form, pre-selected.
+type NuevoParam = "gasto" | "ingreso" | undefined;
+
 export const Route = createFileRoute("/quick-log")({
   head: () => ({ meta: [{ title: "Registrar - FinAxis" }] }),
+  validateSearch: (search: Record<string, unknown>): { nuevo?: NuevoParam } => ({
+    nuevo: search.nuevo === "gasto" || search.nuevo === "ingreso" ? search.nuevo : undefined,
+  }),
   component: QuickLog,
 });
 
 function QuickLog() {
+  const { nuevo } = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
   const allTransactions = useStore((s) => s.transactions);
   // Hide inert parents of pre-existing installment plans (they carry no amount;
   // the real cash flow happens when each cuota is paid).
@@ -24,13 +33,23 @@ function QuickLog() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [toDelete, setToDelete] = useState<Transaction | null>(null);
+  const [initialType, setInitialType] = useState<TxType | undefined>(undefined);
+
+  useEffect(() => {
+    if (!nuevo) return;
+    setInitialType(nuevo === "ingreso" ? "income" : "expense");
+    setEditing(null);
+    setOpen(true);
+    // Clear the param so a refresh or the back button doesn't reopen it.
+    navigate({ search: {}, replace: true });
+  }, [nuevo, navigate]);
 
   return (
     <AppShell
       title="Registrar"
       subtitle="Registro de transacciones sin fricción"
       actions={
-        <Button size="sm" onClick={() => { setEditing(null); setOpen(true); }}>
+        <Button size="sm" onClick={() => { setEditing(null); setInitialType(undefined); setOpen(true); }}>
           <Plus className="mr-2 h-3.5 w-3.5" /> Nueva
         </Button>
       }
@@ -85,7 +104,7 @@ function QuickLog() {
         </CardContent>
       </Card>
 
-      <TransactionDialog open={open} onOpenChange={setOpen} tx={editing} />
+      <TransactionDialog open={open} onOpenChange={setOpen} tx={editing} initialType={editing ? undefined : initialType} />
       <ConfirmDelete
         open={!!toDelete}
         onOpenChange={(v) => !v && setToDelete(null)}
