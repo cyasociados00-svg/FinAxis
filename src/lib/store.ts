@@ -394,11 +394,50 @@ export const useStore = create<State>()(
         set((s) => {
           const prev = s.transactions.find((t) => t.id === id);
           if (!prev) return {};
-          const reverted = revertTxEffects(s, prev);
           const next: Transaction = { ...prev, ...patch };
+          const prevInstallments = s.installments.filter((i) => i.transactionId === prev.id);
+          const hadPlan = prevInstallments.length > 0;
+
+          // Nothing that affects the cuota schedule changed (e.g. only the
+          // concept/category was fixed) — leave installments untouched instead
+          // of deleting and regenerating them, which would reset paid status
+          // and mint new ids for no reason. Compare dates by day only: the
+          // dialog always round-trips through a fixed time-of-day, so an
+          // unchanged date the user didn't touch can still differ in seconds.
+          const scheduleUnchanged =
+            hadPlan &&
+            next.method === prev.method &&
+            next.cardId === prev.cardId &&
+            next.amount === prev.amount &&
+            next.installments === prev.installments &&
+            next.date.slice(0, 10) === prev.date.slice(0, 10);
+
+          if (scheduleUnchanged) {
+            bg(cloud.saveTransaction(next));
+            return { transactions: s.transactions.map((t) => (t.id === id ? next : t)) };
+          }
+
+          const reverted = revertTxEffects(s, prev);
           const eff = applyTxEffects(reverted.cards, reverted.accounts, reverted.installments, next, s.exchangeRate);
+
+          // The schedule actually changed (amount/cuotas/card/date). Best-effort
+          // carry over "paid" for cuota numbers that still exist — the
+          // regenerated installments got fresh ids and start unpaid.
+          let installments = eff.installments;
+          if (hadPlan) {
+            const paidByNumber = new Map(prevInstallments.map((i) => [i.number, i.paid]));
+            const toResync: Installment[] = [];
+            installments = installments.map((i) => {
+              if (i.transactionId !== next.id || !paidByNumber.get(i.number)) return i;
+              const paidInst = { ...i, paid: true };
+              toResync.push(paidInst);
+              return paidInst;
+            });
+            if (toResync.length) bg(cloud.saveInstallments(toResync));
+          }
+
           bg(cloud.saveTransaction(next));
-          return { transactions: s.transactions.map((t) => (t.id === id ? next : t)), ...eff };
+          return { transactions: s.transactions.map((t) => (t.id === id ? next : t)), ...eff, installments };
         }),
       deleteTransaction: (id) =>
         set((s) => {
