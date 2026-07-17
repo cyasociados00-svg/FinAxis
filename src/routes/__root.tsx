@@ -100,6 +100,23 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+// Retry the offline sync queue. Failures aren't always network-related (a
+// data/schema bug can queue an op while the browser stays "online" the whole
+// time), so relying solely on the browser's `online` event leaves those stuck
+// forever. Called on boot and on a periodic timer too, so a fixed bug's
+// backlog drains on its own without requiring an actual reconnect.
+async function flushSyncQueue() {
+  if (syncQueue.size() === 0 || !navigator.onLine) return;
+  const { supabase: sb } = await import("@/integrations/supabase/client");
+  const result = await syncQueue.flush(sb);
+  if (result.flushed > 0) {
+    const { toast } = await import("sonner");
+    toast.success(
+      `${result.flushed} cambio${result.flushed > 1 ? "s" : ""} sincronizado${result.flushed > 1 ? "s" : ""}`,
+    );
+  }
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -118,8 +135,17 @@ function RootComponent() {
 
       // If already logged in, hydrate from Supabase immediately
       store.hydrate();
+
+      // Retry any leftover offline-queue ops now, in case they were stuck on
+      // a bug (not a real disconnect) that's since been fixed.
+      flushSyncQueue();
     }
     boot();
+
+    // Safety net: also retry periodically while the app stays open and
+    // online, so a queue that gets stuck mid-session doesn't wait for a
+    // reload or an actual online/offline transition to drain.
+    const flushInterval = setInterval(flushSyncQueue, 60_000);
 
     // Re-act to auth changes (login / logout from any tab).
     // IMPORTANT: gotrue holds an internal lock while firing this callback.
@@ -143,22 +169,12 @@ function RootComponent() {
     });
 
     // Flush offline queue when connection returns
-    const handleOnline = async () => {
-      if (syncQueue.size() === 0) return;
-      const { supabase: sb } = await import("@/integrations/supabase/client");
-      const result = await syncQueue.flush(sb);
-      if (result.flushed > 0) {
-        const { toast } = await import("sonner");
-        toast.success(
-          `${result.flushed} cambio${result.flushed > 1 ? "s" : ""} sincronizado${result.flushed > 1 ? "s" : ""}`,
-        );
-      }
-    };
-    window.addEventListener("online", handleOnline);
+    window.addEventListener("online", flushSyncQueue);
 
     return () => {
       subscription.unsubscribe();
-      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("online", flushSyncQueue);
+      clearInterval(flushInterval);
     };
   }, []);
 
