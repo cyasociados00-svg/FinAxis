@@ -204,6 +204,20 @@ const savingToRow = (s: ProgrammedSaving, uid: string) => ({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Push any queued offline writes to Supabase, best-effort. Callers that are
+// about to overwrite local state with a fresh snapshot (hydrate) MUST call
+// this first, or unsynced local changes get silently clobbered by the
+// (stale, pre-write) server copy.
+export async function flushQueue(): Promise<void> {
+  if (syncQueue.size() === 0) return;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  try {
+    await syncQueue.flush(supabase);
+  } catch {
+    // best-effort — fetchSnapshot proceeds regardless
+  }
+}
+
 async function userId(): Promise<string | null> {
   const { data } = await supabase.auth.getUser();
   return data.user?.id ?? null;

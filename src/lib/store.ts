@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { addMonths, addWeeks, addDays } from "date-fns";
 import { generateInstallments, addPeriods, savingSchedule } from "./finance-math";
-import { cloud, bg, fetchSnapshot } from "./cloud-sync";
+import { cloud, bg, fetchSnapshot, flushQueue } from "./cloud-sync";
 
 export type TxType = "income" | "expense";
 export type PayMethod = "cash" | "debit" | "credit";
@@ -328,6 +328,11 @@ export const useStore = create<State>()(
       ...initial,
 
       hydrate: async () => {
+        // Push any unsynced local writes first — otherwise this overwrites
+        // local state with a stale server snapshot that doesn't have them
+        // yet, making the change look like it "didn't happen" even though
+        // it's still queued and will land eventually.
+        await flushQueue();
         const snap = await fetchSnapshot();
         if (!snap) return;
         set({ ...snap, hydrated: true } as Partial<State>);
