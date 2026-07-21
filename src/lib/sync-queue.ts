@@ -62,7 +62,10 @@ export const syncQueue = {
           if (error) throw error;
         }
         flushed++;
-      } catch {
+      } catch (e: any) {
+        // Log the reason so a persistently stuck op (e.g. a missing column
+        // after a migration wasn't applied) is diagnosable instead of silent.
+        console.warn(`[SyncQueue] ${op.type} on "${op.table}" failed:`, e?.message ?? e);
         remaining.push(op);
       }
     }
