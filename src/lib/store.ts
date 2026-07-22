@@ -121,6 +121,11 @@ export type ProgrammedSaving = {
   // endDate = start + term periods, aportado = elapsed deposits + openingPYG.
 };
 
+// Monthly net-worth snapshot (ym = "YYYY-MM"). Built up over time so the
+// dashboard can show a real net-worth trend; there's no back-history before
+// the app started recording. Kept local (persisted), not cloud-synced.
+export type NetSnapshot = { ym: string; net: number };
+
 // ─── State type ───────────────────────────────────────────────────────────────
 
 type State = {
@@ -135,9 +140,11 @@ type State = {
   cdas: CDA[];
   funds: MutualFund[];
   programmedSavings: ProgrammedSaving[];
+  netHistory: NetSnapshot[];
 
   hydrate: () => Promise<void>;
   clearLocal: () => void;
+  recordNetSnapshot: () => void;
 
   setExchangeRate: (n: number) => void;
   addAccount: (a: Omit<Account, "id" | "createdAt">) => void;
@@ -226,6 +233,7 @@ const initial: Omit<
   | "updateProgrammedSaving"
   | "deleteProgrammedSaving"
   | "runProgrammedSavings"
+  | "recordNetSnapshot"
   | "resetData"
 > = {
   hydrated: false,
@@ -239,6 +247,7 @@ const initial: Omit<
   cdas: [],
   funds: [],
   programmedSavings: [],
+  netHistory: [],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -773,6 +782,17 @@ export const useStore = create<State>()(
         }
       },
 
+      // Upsert this month's net-worth snapshot (kept: last 24 months).
+      recordNetSnapshot: () => {
+        const ym = new Date().toISOString().slice(0, 7);
+        const net = Math.round(computeTotals(get()).net);
+        set((st) => {
+          const rest = st.netHistory.filter((h) => h.ym !== ym);
+          const netHistory = [...rest, { ym, net }].sort((a, b) => a.ym.localeCompare(b.ym)).slice(-24);
+          return { netHistory };
+        });
+      },
+
       resetData: async () => {
         await cloud.wipeAll();
         set({ ...initial, hydrated: true });
@@ -791,6 +811,7 @@ export const useStore = create<State>()(
         cdas: state.cdas,
         funds: state.funds,
         programmedSavings: state.programmedSavings,
+        netHistory: state.netHistory,
         hydrated: state.hydrated,
       }),
     },
@@ -824,8 +845,7 @@ export function purchaseFromAccount(args: {
   });
 }
 
-export const useTotals = () => {
-  const s = useStore();
+export function computeTotals(s: State) {
   const cashPYG = s.accounts.reduce((a, x) => a + Number(x.balancePYG || 0), 0);
   const debtPYG = s.cards.reduce((a, x) => a + Number(x.balancePYG || 0), 0);
   const stocksUSD = s.stocks.reduce((a, x) => a + x.qty * x.currentPriceUSD, 0);
@@ -849,21 +869,12 @@ export const useTotals = () => {
   const contingent = debtPYG;
   const net = liquid + cdasPYG + fundsPYG + stocksPYG + cryptoPYG + savingsPYG - debtPYG;
   return {
-    cashPYG,
-    debtPYG,
-    stocksUSD,
-    stocksPYG,
-    cryptoUSD,
-    cryptoPYG,
-    fundsPYG,
-    cdasPYG,
-    savingsPYG,
-    futureInstallments,
-    liquid,
-    contingent,
-    net,
+    cashPYG, debtPYG, stocksUSD, stocksPYG, cryptoUSD, cryptoPYG,
+    fundsPYG, cdasPYG, savingsPYG, futureInstallments, liquid, contingent, net,
   };
-};
+}
+
+export const useTotals = () => computeTotals(useStore());
 
 // silence unused import warning
 void addDays;

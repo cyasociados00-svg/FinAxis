@@ -134,6 +134,7 @@ function RootComponent() {
       await store.hydrate();
       try {
         store.runProgrammedSavings();
+        store.recordNetSnapshot();
       } catch (e) {
         console.error(e);
       }

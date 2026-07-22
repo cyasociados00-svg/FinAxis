@@ -186,6 +186,31 @@ export const futureInstallmentsByMonth = (
   return Array.from(buckets, ([month, amount]) => ({ month, amount }));
 };
 
+// Upcoming programmed-savings deposits per month — the cash you'll need to set
+// aside. Callers should pass only account-funded plans (external/"capital
+// previo" plans don't draw from your accounts).
+export const futureSavingsByMonth = (
+  savings: Array<{ amountPYG: number; frequency: Freq; termPeriods: number; startDate: string; active: boolean }>,
+  months = 6,
+) => {
+  const buckets = new Map<string, number>();
+  const start = startOfMonth(new Date());
+  for (let i = 0; i < months; i++) buckets.set(format(addMonths(start, i), "yyyy-MM"), 0);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  for (const s of savings) {
+    if (!s.active) continue;
+    for (let k = 0; k < s.termPeriods; k++) {
+      const d = addPeriods(s.startDate, s.frequency, k); // deposit #(k+1) at start + k
+      const dTs = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      if (dTs < today) continue; // only deposits still to come
+      const key = format(startOfMonth(d), "yyyy-MM");
+      if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + s.amountPYG);
+    }
+  }
+  return Array.from(buckets, ([month, amount]) => ({ month, amount }));
+};
+
 export const monthlyIncomeExpense = (transactions: Transaction[], months = 6) => {
   const buckets: Record<
     string,

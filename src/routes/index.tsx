@@ -3,8 +3,10 @@ import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { IncomeExpenseBar } from "@/components/charts/income-expense-bar";
-import { AllocationDonut } from "@/components/charts/allocation-donut";
+import { AllocationBars } from "@/components/charts/allocation-bars";
 import { CashflowProjection } from "@/components/charts/cashflow-projection";
+import { NetWorthTrend } from "@/components/charts/networth-trend";
+import { SavingsCommitment } from "@/components/charts/savings-commitment";
 import { useStore, useTotals } from "@/lib/store";
 import { formatPYG, formatUSD } from "@/lib/format";
 import { Wallet, Droplet, AlertTriangle } from "lucide-react";
@@ -82,7 +84,7 @@ function Dashboard() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Asset Allocation</CardTitle>
           </CardHeader>
-          <CardContent><AllocationDonut /></CardContent>
+          <CardContent><AllocationBars /></CardContent>
         </Card>
       </div>
 
@@ -111,6 +113,21 @@ function Dashboard() {
             <div className="my-2 border-t" />
             <Row label="Patrimonio Neto" value={formatPYG(t.net)} bold />
           </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Variación de Patrimonio - últimos 6 meses</CardTitle>
+          </CardHeader>
+          <CardContent><NetWorthTrend /></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Ahorro comprometido - próximos 6 meses</CardTitle>
+          </CardHeader>
+          <CardContent><SavingsCommitment /></CardContent>
         </Card>
       </div>
 
