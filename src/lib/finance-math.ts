@@ -43,10 +43,13 @@ export function savingSchedule(
   const endDate = addPeriods(s.startDate, s.frequency, term).toISOString();
   // Deposit #k falls at start + (k-1) periods: #1 on the start date itself, and
   // #term one period before maturity (maturity = start + term). So elapsed
-  // deposits are those at offsets 0..term-1 that are already due.
+  // deposits are those at offsets 0..term-1 that are already due. Compare by
+  // calendar day so a deposit dated today counts as elapsed regardless of time.
+  const dayTs = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const asOfDay = dayTs(asOf);
   let elapsed = 0;
   for (let k = 0; k <= term - 1; k++) {
-    if (addPeriods(s.startDate, s.frequency, k) <= asOf) elapsed++;
+    if (dayTs(addPeriods(s.startDate, s.frequency, k)) <= asOfDay) elapsed++;
   }
   const pendingCount = Math.max(0, term - elapsed);
   const aportadoCuotas = elapsed * s.amountPYG;

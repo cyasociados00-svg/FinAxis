@@ -126,15 +126,17 @@ function RootComponent() {
       const { useStore } = await import("@/lib/store");
       const store = useStore.getState();
 
-      // Run pending programmed-savings deposits
+      // Hydrate from Supabase FIRST, then process programmed-savings deposits
+      // on the freshly-loaded state. If we ran deposits before hydrating, the
+      // subsequent hydrate would overwrite the local debit/account change with
+      // a stale cloud snapshot before those writes landed (account wouldn't
+      // decrease, nextRun would revert → duplicate debits).
+      await store.hydrate();
       try {
         store.runProgrammedSavings();
       } catch (e) {
         console.error(e);
       }
-
-      // If already logged in, hydrate from Supabase immediately
-      store.hydrate();
 
       // Retry any leftover offline-queue ops now, in case they were stuck on
       // a bug (not a real disconnect) that's since been fixed.
@@ -162,6 +164,7 @@ function RootComponent() {
 
         if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
           await store.hydrate();
+          try { store.runProgrammedSavings(); } catch (e) { console.error(e); }
         } else if (event === "SIGNED_OUT") {
           store.clearLocal();
         }

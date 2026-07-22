@@ -248,6 +248,10 @@ const uid = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+// Calendar-day timestamp (local midnight) — lets us compare dates by day,
+// ignoring time-of-day, so a deposit dated "today at noon" counts as due now.
+const dayTs = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
 function advance(dateISO: string, freq: ScheduledFrequency): string {
   const d = new Date(dateISO);
   if (freq === "weekly") return addWeeks(d, 1).toISOString();
@@ -702,15 +706,16 @@ export const useStore = create<State>()(
       // ── Programmed savings ───────────────────────────────────────────────────
       addProgrammedSaving: (s) => {
         const nowISO = new Date().toISOString();
-        const now = new Date();
-        // Engine cursor: first deposit date strictly after "now". Deposit #k
-        // falls at start + (k-1) periods (#1 on the start date). Deposits that
-        // already elapsed before creating the plan are prior contributions and
-        // are never debited from an account.
+        // Engine cursor: first deposit whose day is >= the creation day. Deposit
+        // #k falls at start + (k-1) periods (#1 on the start date). Deposits
+        // dated before today already elapsed outside the app (prior
+        // contributions) and are never debited; the first deposit on/after today
+        // is the first one the app will debit — so a plan created today with
+        // today's start debits its first cuota today.
         let nextRun = addPeriods(s.startDate, s.frequency, Math.max(0, s.termPeriods - 1)).toISOString();
         for (let k = 0; k <= s.termPeriods - 1; k++) {
           const d = addPeriods(s.startDate, s.frequency, k);
-          if (d > now) { nextRun = d.toISOString(); break; }
+          if (dayTs(d) >= dayTs(new Date())) { nextRun = d.toISOString(); break; }
         }
         const saving: ProgrammedSaving = { ...s, id: uid(), nextRun, createdAt: nowISO };
         set((st) => ({ programmedSavings: [...st.programmedSavings, saving] }));
@@ -727,27 +732,35 @@ export const useStore = create<State>()(
         set((s) => ({ programmedSavings: s.programmedSavings.filter((x) => x.id !== id) }));
         bg(cloud.deleteProgrammedSaving(id));
       },
-      // Debit the account for deposits that come due while using the app. Only
-      // future deposits (after the plan was created) are processed; already
-      // elapsed cuotas are treated as prior contributions and never debited.
+      // Debit the account for deposits that have come due. Compared by calendar
+      // day so a deposit dated today fires regardless of the time of day. Only
+      // deposits from the cursor forward are processed; cuotas prior to the
+      // plan's creation are treated as prior contributions and never debited.
       runProgrammedSavings: () => {
-        const now = new Date();
+        const todayDay = dayTs(new Date());
         for (const s of get().programmedSavings) {
           if (!s.active) continue;
           // Last deposit falls one period before maturity (start + term).
-          const lastDeposit = addPeriods(s.startDate, s.frequency, Math.max(0, s.termPeriods - 1)).getTime();
+          const lastDepositDay = dayTs(addPeriods(s.startDate, s.frequency, Math.max(0, s.termPeriods - 1)));
           const external = !s.sourceAccountId || s.sourceAccountId === EXTERNAL_ORIGIN;
+          const concept = `Ahorro programado · ${s.name}`;
           let next = s.nextRun;
           let safety = 0;
-          while (new Date(next) <= now && new Date(next).getTime() <= lastDeposit && safety < 200) {
-            if (!external) {
+          while (dayTs(new Date(next)) <= todayDay && dayTs(new Date(next)) <= lastDepositDay && safety < 200) {
+            // Idempotency guard: if a deposit for this saving on this day already
+            // exists, don't create it again (protects against a re-run after a
+            // hydrate reverted the cursor before it persisted).
+            const already = get().transactions.some(
+              (t) => t.category === "Ahorro" && t.concept === concept && dayTs(new Date(t.date)) === dayTs(new Date(next)),
+            );
+            if (!external && !already) {
               const acc = get().accounts.find((a) => a.id === s.sourceAccountId);
               if (!acc || acc.balancePYG < s.amountPYG) break;
               get().addTransaction({
                 type: "expense",
                 method: acc.kind,
                 amount: s.amountPYG,
-                concept: `Ahorro programado · ${s.name}`,
+                concept,
                 category: "Ahorro",
                 accountId: s.sourceAccountId,
                 date: next,
