@@ -121,6 +121,24 @@ export type ProgrammedSaving = {
   // endDate = start + term periods, aportado = elapsed deposits + openingPYG.
 };
 
+// A fixed income/expense that repeats on a schedule (salary, rent, utilities).
+// The engine auto-registers a transaction from this template each time one
+// comes due, so it doesn't have to be entered by hand every month.
+export type RecurringRule = {
+  id: string;
+  concept: string;
+  amount: number;
+  category: string;
+  type: TxType;
+  method: PayMethod;
+  accountId?: string;
+  cardId?: string;
+  frequency: ScheduledFrequency;
+  nextRun: string;   // engine cursor: next occurrence still to register (ISO)
+  active: boolean;
+  createdAt: string;
+};
+
 // Monthly net-worth snapshot (ym = "YYYY-MM"). Built up over time so the
 // dashboard can show a real net-worth trend; there's no back-history before
 // the app started recording. Kept local (persisted), not cloud-synced.
@@ -140,11 +158,16 @@ type State = {
   cdas: CDA[];
   funds: MutualFund[];
   programmedSavings: ProgrammedSaving[];
+  recurringRules: RecurringRule[];
   netHistory: NetSnapshot[];
 
   hydrate: () => Promise<void>;
   clearLocal: () => void;
   recordNetSnapshot: () => void;
+  addRecurringRule: (r: Omit<RecurringRule, "id" | "createdAt">) => void;
+  updateRecurringRule: (id: string, patch: Partial<Omit<RecurringRule, "id">>) => void;
+  deleteRecurringRule: (id: string) => void;
+  runRecurringRules: () => void;
 
   setExchangeRate: (n: number) => void;
   addAccount: (a: Omit<Account, "id" | "createdAt">) => void;
@@ -234,6 +257,10 @@ const initial: Omit<
   | "deleteProgrammedSaving"
   | "runProgrammedSavings"
   | "recordNetSnapshot"
+  | "addRecurringRule"
+  | "updateRecurringRule"
+  | "deleteRecurringRule"
+  | "runRecurringRules"
   | "resetData"
 > = {
   hydrated: false,
@@ -247,6 +274,7 @@ const initial: Omit<
   cdas: [],
   funds: [],
   programmedSavings: [],
+  recurringRules: [],
   netHistory: [],
 };
 
@@ -795,6 +823,60 @@ export const useStore = create<State>()(
         }
       },
 
+      // ── Recurring rules ──────────────────────────────────────────────────────
+      addRecurringRule: (r) => {
+        const rule: RecurringRule = { ...r, id: uid(), createdAt: new Date().toISOString() };
+        set((s) => ({ recurringRules: [...s.recurringRules, rule] }));
+        bg(cloud.saveRecurringRule(rule));
+      },
+      updateRecurringRule: (id, patch) =>
+        set((s) => {
+          const next = s.recurringRules.map((x) => (x.id === id ? { ...x, ...patch } : x));
+          const u = next.find((x) => x.id === id);
+          if (u) bg(cloud.saveRecurringRule(u));
+          return { recurringRules: next };
+        }),
+      deleteRecurringRule: (id) => {
+        set((s) => ({ recurringRules: s.recurringRules.filter((x) => x.id !== id) }));
+        bg(cloud.deleteRecurringRule(id));
+      },
+      // Register a transaction for every occurrence that has come due. Compared
+      // by calendar day so an occurrence dated today fires regardless of time.
+      runRecurringRules: () => {
+        const todayDay = dayTs(new Date());
+        for (const r of get().recurringRules) {
+          if (!r.active) continue;
+          let next = r.nextRun;
+          let safety = 0;
+          while (dayTs(new Date(next)) <= todayDay && safety < 200) {
+            // Idempotency: don't double-register the same occurrence if a
+            // previous run's cursor advance didn't persist.
+            const already = get().transactions.some(
+              (t) =>
+                t.concept === r.concept &&
+                t.category === r.category &&
+                t.amount === r.amount &&
+                dayTs(new Date(t.date)) === dayTs(new Date(next)),
+            );
+            if (!already) {
+              get().addTransaction({
+                type: r.type,
+                method: r.method,
+                amount: r.amount,
+                concept: r.concept,
+                category: r.category,
+                accountId: r.accountId,
+                cardId: r.cardId,
+                date: next,
+              });
+            }
+            next = advance(next, r.frequency);
+            safety++;
+          }
+          if (next !== r.nextRun) get().updateRecurringRule(r.id, { nextRun: next });
+        }
+      },
+
       // Upsert this month's net-worth snapshot (kept: last 24 months).
       recordNetSnapshot: () => {
         const ym = new Date().toISOString().slice(0, 7);
@@ -824,6 +906,7 @@ export const useStore = create<State>()(
         cdas: state.cdas,
         funds: state.funds,
         programmedSavings: state.programmedSavings,
+        recurringRules: state.recurringRules,
         netHistory: state.netHistory,
         hydrated: state.hydrated,
       }),

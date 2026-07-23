@@ -133,6 +133,7 @@ function RootComponent() {
       // decrease, nextRun would revert → duplicate debits).
       await store.hydrate();
       try {
+        store.runRecurringRules();
         store.runProgrammedSavings();
         store.recordNetSnapshot();
       } catch (e) {
@@ -165,7 +166,10 @@ function RootComponent() {
 
         if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
           await store.hydrate();
-          try { store.runProgrammedSavings(); } catch (e) { console.error(e); }
+          try {
+            store.runRecurringRules();
+            store.runProgrammedSavings();
+          } catch (e) { console.error(e); }
         } else if (event === "SIGNED_OUT") {
           store.clearLocal();
         }

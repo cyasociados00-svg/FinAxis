@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useStore, type Transaction, type TxType } from "@/lib/store";
+import { useStore, type RecurringRule, type Transaction, type TxType } from "@/lib/store";
 import { useEffect, useMemo, useState } from "react";
 import { formatPYG, formatDate } from "@/lib/format";
-import { Pencil, Trash2, Plus, Search, X } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, X, Repeat, Pause, Play } from "lucide-react";
 import { TransactionDialog } from "@/components/forms/transaction-dialog";
 import { ConfirmDelete } from "@/components/forms/confirm-delete";
 
@@ -27,6 +27,7 @@ export const Route = createFileRoute("/quick-log")({
 });
 
 const methodLabel: Record<string, string> = { cash: "Efectivo", debit: "Débito", credit: "Tarjeta" };
+const freqLabel: Record<string, string> = { weekly: "semanal", biweekly: "quincenal", monthly: "mensual" };
 
 function QuickLog() {
   const { nuevo } = Route.useSearch();
@@ -35,6 +36,10 @@ function QuickLog() {
   const cards = useStore((s) => s.cards);
   const accounts = useStore((s) => s.accounts);
   const deleteTransaction = useStore((s) => s.deleteTransaction);
+  const recurringRules = useStore((s) => s.recurringRules);
+  const updateRecurringRule = useStore((s) => s.updateRecurringRule);
+  const deleteRecurringRule = useStore((s) => s.deleteRecurringRule);
+  const [ruleToDelete, setRuleToDelete] = useState<RecurringRule | null>(null);
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
@@ -189,6 +194,46 @@ function QuickLog() {
         </CardContent>
       </Card>
 
+      {recurringRules.length > 0 && (
+        <Card className="mb-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <Repeat className="h-4 w-4 text-muted-foreground" /> Recurrentes
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Se registran solas al vencer. Pausá o eliminá una regla cuando deje de aplicar.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-1.5 pt-0">
+            {recurringRules.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-2 rounded border bg-muted/30 px-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">
+                    {r.concept}
+                    {!r.active && <Badge variant="outline" className="ml-2 text-[9px]">pausada</Badge>}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {r.category} · {freqLabel[r.frequency]} · próx {formatDate(r.nextRun)}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className={`num font-mono text-sm ${r.type === "income" ? "text-[color:var(--color-positive)]" : "text-[color:var(--color-negative)]"}`}>
+                    {r.type === "income" ? "+" : "-"}{formatPYG(r.amount)}
+                  </span>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" title={r.active ? "Pausar" : "Reanudar"}
+                    onClick={() => updateRecurringRule(r.id, { active: !r.active })}>
+                    {r.active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setRuleToDelete(r)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium">Transacciones registradas</CardTitle>
@@ -253,6 +298,17 @@ function QuickLog() {
         title="¿Eliminar transacción?"
         description={toDelete ? `${toDelete.concept} · ${formatPYG(toDelete.amount)}. Esta acción no se puede deshacer y revertirá saldos/cuotas si aplica.` : undefined}
         onConfirm={() => { if (toDelete) deleteTransaction(toDelete.id); setToDelete(null); }}
+      />
+      <ConfirmDelete
+        open={!!ruleToDelete}
+        onOpenChange={(v) => !v && setRuleToDelete(null)}
+        title="¿Eliminar regla recurrente?"
+        description={
+          ruleToDelete
+            ? `${ruleToDelete.concept} · ${formatPYG(ruleToDelete.amount)} ${freqLabel[ruleToDelete.frequency]}. Dejará de registrarse automáticamente; las transacciones ya registradas se mantienen.`
+            : undefined
+        }
+        onConfirm={() => { if (ruleToDelete) deleteRecurringRule(ruleToDelete.id); setRuleToDelete(null); }}
       />
     </AppShell>
   );

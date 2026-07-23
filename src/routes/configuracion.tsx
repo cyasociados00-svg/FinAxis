@@ -74,6 +74,7 @@ function Configuracion() {
         cdas: store.cdas,
         funds: store.funds,
         programmedSavings: store.programmedSavings,
+        recurringRules: store.recurringRules,
       });
       setMigrationDone(true);
       setCloudIsEmpty(false);

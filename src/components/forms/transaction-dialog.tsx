@@ -11,9 +11,15 @@ import {
   INCOME_CATEGORIES,
   useStore,
   type PayMethod,
+  type ScheduledFrequency,
   type Transaction,
   type TxType,
 } from "@/lib/store";
+import { addPeriods } from "@/lib/finance-math";
+
+// Next occurrence of a recurring rule, one period after the given ISO date.
+const advancePeriod = (iso: string, freq: ScheduledFrequency) =>
+  addPeriods(iso, freq, 1).toISOString();
 
 type Props = {
   open: boolean;
@@ -29,6 +35,7 @@ export function TransactionDialog({ open, onOpenChange, tx, initialType }: Props
   const accounts = useStore((s) => s.accounts); // CORREGIDO: Traemos las cuentas
   const addTransaction = useStore((s) => s.addTransaction);
   const updateTransaction = useStore((s) => s.updateTransaction);
+  const addRecurringRule = useStore((s) => s.addRecurringRule);
 
   const [type, setType] = useState<TxType>("expense");
   const [amount, setAmount] = useState("");
@@ -38,6 +45,8 @@ export function TransactionDialog({ open, onOpenChange, tx, initialType }: Props
   const [cardId, setCardId] = useState(cards[0]?.id ?? "");
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? ""); // CORREGIDO: Estado local para cuenta
   const [installments, setInstallments] = useState("1");
+  const [recurring, setRecurring] = useState(false);
+  const [recurFreq, setRecurFreq] = useState<ScheduledFrequency>("monthly");
   const [date, setDate] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -68,6 +77,9 @@ export function TransactionDialog({ open, onOpenChange, tx, initialType }: Props
       const today = new Date();
       setDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`);
     }
+    // Recurrence is only offered when creating a new transaction.
+    setRecurring(false);
+    setRecurFreq("monthly");
   }, [open, tx, cards, accounts, initialType]);
 
   const cats = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
@@ -93,8 +105,27 @@ export function TransactionDialog({ open, onOpenChange, tx, initialType }: Props
       date: new Date(`${date}T12:00:00`).toISOString(),
     };
 
-    if (tx) updateTransaction(tx.id, payload);
-    else addTransaction(payload);
+    if (tx) {
+      updateTransaction(tx.id, payload);
+    } else {
+      addTransaction(payload);
+      // Also save it as a recurring rule; the first occurrence is the
+      // transaction we just registered, so the cursor starts one period later.
+      if (recurring) {
+        addRecurringRule({
+          concept,
+          amount: n,
+          category,
+          type,
+          method,
+          accountId: payload.accountId,
+          cardId: payload.cardId,
+          frequency: recurFreq,
+          nextRun: advancePeriod(payload.date, recurFreq),
+          active: true,
+        });
+      }
+    }
     onOpenChange(false);
   };
 
@@ -238,6 +269,44 @@ export function TransactionDialog({ open, onOpenChange, tx, initialType }: Props
               </div>
             </div>
           )}
+
+          {/* Recurrence — only when creating; editing a past transaction
+              shouldn't retroactively turn it into a rule. */}
+          {!tx && (
+            <div className="rounded border bg-muted/40 p-3">
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={recurring}
+                  onChange={(e) => setRecurring(e.target.checked)}
+                  className="mt-1"
+                />
+                <div>
+                  <div className="font-medium">Es recurrente</div>
+                  <div className="text-xs text-muted-foreground">
+                    Se registrará solo cada período (honorarios, alquiler, servicios). Usalo cuando el monto es fijo.
+                  </div>
+                </div>
+              </label>
+              {recurring && (
+                <div className="mt-2">
+                  <Label className="text-xs uppercase tracking-wider">Frecuencia</Label>
+                  <Select value={recurFreq} onValueChange={(v) => setRecurFreq(v as ScheduledFrequency)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weekly">Semanal</SelectItem>
+                      <SelectItem value="biweekly">Quincenal</SelectItem>
+                      <SelectItem value="monthly">Mensual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Esta transacción es la primera; la próxima se registrará automáticamente al vencer.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar

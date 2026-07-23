@@ -9,6 +9,7 @@ import type {
   Installment,
   MutualFund,
   ProgrammedSaving,
+  RecurringRule,
   StockPosition,
   Transaction,
 } from "./store";
@@ -202,6 +203,35 @@ const savingToRow = (s: ProgrammedSaving, uid: string) => ({
   active: s.active,
 });
 
+export const recurringFromRow = (r: any): RecurringRule => ({
+  id: r.id,
+  concept: r.concept,
+  amount: Number(r.amount) || 0,
+  category: r.category,
+  type: r.type,
+  method: r.method,
+  accountId: r.account_id ?? undefined,
+  cardId: r.card_id ?? undefined,
+  frequency: r.frequency,
+  nextRun: r.next_run,
+  active: r.active,
+  createdAt: r.created_at ?? new Date().toISOString(),
+});
+const recurringToRow = (r: RecurringRule, uid: string) => ({
+  id: r.id,
+  user_id: uid,
+  concept: r.concept,
+  amount: r.amount,
+  category: r.category,
+  type: r.type,
+  method: r.method,
+  account_id: r.accountId ?? null,
+  card_id: r.cardId ?? null,
+  frequency: r.frequency,
+  next_run: r.nextRun,
+  active: r.active,
+});
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // Push any queued offline writes to Supabase, best-effort. Callers that are
@@ -247,13 +277,14 @@ export type CloudSnapshot = {
   cdas: CDA[];
   funds: MutualFund[];
   programmedSavings: ProgrammedSaving[];
+  recurringRules: RecurringRule[];
 };
 
 export async function fetchSnapshot(): Promise<CloudSnapshot | null> {
   const uid = await userId();
   if (!uid) return null;
 
-  const [a, c, t, i, s, cr, cd, f, ps, st] = await Promise.all([
+  const [a, c, t, i, s, cr, cd, f, ps, rr, st] = await Promise.all([
     supabase.from("accounts").select("*").eq("user_id", uid).order("created_at"),
     supabase.from("cards").select("*").eq("user_id", uid).order("created_at"),
     supabase.from("transactions").select("*").eq("user_id", uid).order("date", { ascending: false }),
@@ -263,13 +294,16 @@ export async function fetchSnapshot(): Promise<CloudSnapshot | null> {
     supabase.from("cdas").select("*").eq("user_id", uid),
     supabase.from("funds").select("*").eq("user_id", uid),
     supabase.from("programmed_savings").select("*").eq("user_id", uid).order("created_at"),
+    supabase.from("recurring_rules").select("*").eq("user_id", uid).order("created_at"),
     supabase.from("settings").select("exchange_rate").eq("user_id", uid).maybeSingle(),
   ]);
 
   for (const r of [a, c, t, i, s, cr, cd, f]) check(r.error, "hydrate");
-  // programmed_savings is newer: if the table isn't created yet, degrade
-  // gracefully to an empty list instead of breaking the whole hydrate.
+  // programmed_savings / recurring_rules are newer: if the table isn't created
+  // yet, degrade gracefully to an empty list instead of breaking the whole
+  // hydrate.
   if (ps.error) console.warn("[Cloud] programmed_savings unavailable:", ps.error.message);
+  if (rr.error) console.warn("[Cloud] recurring_rules unavailable:", rr.error.message);
 
   return {
     exchangeRate: Number(st.data?.exchange_rate ?? 7500),
@@ -282,6 +316,7 @@ export async function fetchSnapshot(): Promise<CloudSnapshot | null> {
     cdas: (cd.data ?? []).map(cdaFromRow),
     funds: (f.data ?? []).map(fundFromRow),
     programmedSavings: (ps.data ?? []).map(savingFromRow),
+    recurringRules: (rr.data ?? []).map(recurringFromRow),
   };
 }
 
@@ -415,6 +450,14 @@ export const cloud = {
     await deleteRow("programmed_savings", id);
   },
 
+  async saveRecurringRule(r: RecurringRule) {
+    const uid = await userId();
+    if (uid) await upsertRow("recurring_rules", recurringToRow(r, uid));
+  },
+  async deleteRecurringRule(id: string) {
+    await deleteRow("recurring_rules", id);
+  },
+
   async saveExchangeRate(rate: number) {
     const uid = await userId();
     if (!uid) return;
@@ -424,7 +467,7 @@ export const cloud = {
   async wipeAll() {
     const uid = await userId();
     if (!uid) return;
-    for (const t of ["installments", "transactions", "accounts", "cards", "stocks", "crypto", "cdas", "funds", "programmed_savings"]) {
+    for (const t of ["installments", "transactions", "accounts", "cards", "stocks", "crypto", "cdas", "funds", "programmed_savings", "recurring_rules"]) {
       const { error } = await supabase.from(t).delete().eq("user_id", uid);
       check(error, `${t} wipe`);
     }
@@ -448,6 +491,7 @@ export async function pushLocalToCloud(snapshot: CloudSnapshot & { exchangeRate:
     { table: "cdas", rows: snapshot.cdas.map((r) => cdaToRow(r, uid)) },
     { table: "funds", rows: snapshot.funds.map((r) => fundToRow(r, uid)) },
     { table: "programmed_savings", rows: (snapshot.programmedSavings ?? []).map((r) => savingToRow(r, uid)) },
+    { table: "recurring_rules", rows: (snapshot.recurringRules ?? []).map((r) => recurringToRow(r, uid)) },
   ];
 
   for (const { table, rows } of tables) {
