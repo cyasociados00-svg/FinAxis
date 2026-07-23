@@ -300,6 +300,12 @@ function revertTxEffects(state: State, tx: Transaction) {
     accounts = accounts.map((a) => (a.id === tx.accountId ? applyAccountDeltaPYG(a, delta, state.exchangeRate) : a));
     const acc = accounts.find((a) => a.id === tx.accountId);
     if (acc) bg(cloud.saveAccount(acc));
+    // Undo a card payment's debt reduction.
+    if (tx.type === "expense" && tx.category === "Pago tarjeta" && tx.cardId) {
+      cards = cards.map((c) => (c.id === tx.cardId ? { ...c, balancePYG: c.balancePYG + tx.amount } : c));
+      const card = cards.find((c) => c.id === tx.cardId);
+      if (card) bg(cloud.saveCard(card));
+    }
   }
 
   if (hasInstallments) {
@@ -329,6 +335,13 @@ function applyTxEffects(cards: CreditCard[], accounts: Account[], installments: 
     nextAccounts = accounts.map((a) => (a.id === tx.accountId ? applyAccountDeltaPYG(a, delta, rate) : a));
     const acc = nextAccounts.find((a) => a.id === tx.accountId);
     if (acc) bg(cloud.saveAccount(acc));
+    // Card payment (expense from an account toward a card): also pay down the
+    // card's debt, raising its available credit.
+    if (tx.type === "expense" && tx.category === "Pago tarjeta" && tx.cardId) {
+      nextCards = nextCards.map((c) => (c.id === tx.cardId ? { ...c, balancePYG: Math.max(0, c.balancePYG - tx.amount) } : c));
+      const card = nextCards.find((c) => c.id === tx.cardId);
+      if (card) bg(cloud.saveCard(card));
+    }
   }
   return { cards: nextCards, accounts: nextAccounts, installments: nextInst };
 }

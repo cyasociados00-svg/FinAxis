@@ -72,6 +72,10 @@ export function TransactionDialog({ open, onOpenChange, tx, initialType }: Props
 
   const cats = type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
+  // Paying a credit card: an expense from an account/cash toward a card. It
+  // reduces the account AND pays down that card's debt (raising its available).
+  const isCardPayment = type === "expense" && (method === "cash" || method === "debit") && category === "Pago tarjeta";
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const n = Number(amount);
@@ -83,7 +87,7 @@ export function TransactionDialog({ open, onOpenChange, tx, initialType }: Props
       category,
       type,
       method,
-      cardId: method === "credit" ? cardId : undefined,
+      cardId: method === "credit" ? cardId : isCardPayment ? cardId : undefined,
       accountId: method === "cash" || method === "debit" ? accountId : undefined, // CORREGIDO: El descalce contable se soluciona enviando la cuenta
       installments: method === "credit" ? Math.max(1, Number(installments) || 1) : undefined,
       date: new Date(`${date}T12:00:00`).toISOString(),
@@ -164,7 +168,7 @@ export function TransactionDialog({ open, onOpenChange, tx, initialType }: Props
 
           {/* CORREGIDO: UI condicional para seleccionar la cuenta afectada si es Cash o Débito */}
           {(method === "cash" || method === "debit") && (
-            <div className="rounded border bg-muted/40 p-3">
+            <div className="space-y-3 rounded border bg-muted/40 p-3">
               <div>
                 <Label className="text-xs uppercase tracking-wider">
                   {type === "income" ? "Cuenta de Destino (Depósito)" : "Cuenta de Origen (Pago)"}
@@ -182,6 +186,25 @@ export function TransactionDialog({ open, onOpenChange, tx, initialType }: Props
                   </SelectContent>
                 </Select>
               </div>
+
+              {isCardPayment && (
+                <div>
+                  <Label className="text-xs uppercase tracking-wider">Tarjeta a pagar</Label>
+                  <Select value={cardId} onValueChange={setCardId}>
+                    <SelectTrigger><SelectValue placeholder="Elegir tarjeta" /></SelectTrigger>
+                    <SelectContent>
+                      {cards.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} (deuda {c.balancePYG.toLocaleString("es-PY")} Gs)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Descuenta de la cuenta y reduce la deuda de esta tarjeta (sube el disponible).
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
